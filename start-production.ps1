@@ -146,8 +146,8 @@ if (-not $SkipSSLCheck) {
     $domain = $envVars["DOMAIN"]
     $sslPaths = @(
         "ssl-data\conf\live\${domain}\fullchain.pem",
-        "C:\Certbot\live\${domain}\fullchain.pem",
-        "ssl-data\conf\live\${domain}\fullchain.pem"
+        "ssl-data\conf\live\${domain}\cert.pem",
+        "C:\Certbot\live\${domain}\fullchain.pem"
     )
     
     $sslFound = $false
