@@ -145,9 +145,9 @@ if (-not $SkipSSLCheck) {
     
     $domain = $envVars["DOMAIN"]
     $sslPaths = @(
-        "ssl-data\conf\live\$domain\fullchain.pem",
-        "C:\Certbot\live\$domain\fullchain.pem",
-        "ssl-data\conf\live\$domain\fullchain.pem"
+        "ssl-data\conf\live\${domain}\fullchain.pem",
+        "C:\Certbot\live\${domain}\fullchain.pem",
+        "ssl-data\conf\live\${domain}\fullchain.pem"
     )
     
     $sslFound = $false
@@ -327,7 +327,7 @@ try {
 }
 
 # Check SSL certificate expiry
-if (Test-Path "ssl-data\conf\live\$domain\fullchain.pem") {
+if (Test-Path "ssl-data\conf\live\${domain}\fullchain.pem") {
     try {
         $certInfo = docker run --rm -v "$PWD\ssl-data\conf\live\${domain}:/certs" alpine/openssl x509 -enddate -noout -in /certs/fullchain.pem 2>$null
         if ($certInfo -match "notAfter=(.+)") {
