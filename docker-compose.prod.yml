@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: requiem-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
+      - ./nginx/security.conf:/etc/nginx/conf.d/security.conf:ro
+      - /c/Certbot/live/${DOMAIN}:/etc/nginx/ssl:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - requiem-network
+    environment:
+      - DOMAIN=${DOMAIN}
+
+  # Discord Bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: requiem-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - DATABASE_PATH=/app/data/tracking.db
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - requiem-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import asyncio; import aiohttp; asyncio.run(aiohttp.ClientSession().get(\"http://localhost:8001/health\"))'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: requiem-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_PATH=/app/data/tracking.db
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PYTHONPATH=/app
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - requiem-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - REACT_APP_API_URL=https://${DOMAIN}/api
+        - REACT_APP_DEFAULT_GUILD_ID=${DISCORD_GUILD_ID}
+        - REACT_APP_DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+    container_name: requiem-frontend
+    restart: unless-stopped
+    networks:
+      - requiem-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  requiem-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
+  logs:
+    driver: local

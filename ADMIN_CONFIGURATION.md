@@ -1,19 +1,19 @@
 # 🛡️ Admin Configuration Guide
 
 ## Overview
-Das Requiem Tracking System unterstützt flexible Admin-Konfiguration über Environment Variables.
+The Requiem Tracking System supports flexible admin configuration via environment variables.
 
 ## Environment Variables
 
 ### ADMIN_ROLE_IDS
-Definiert Discord-Rollen-IDs, die Admin-Rechte erhalten.
+Defines Discord role IDs that receive admin privileges.
 
-**Format:** Komma-getrennte Liste von Discord Rollen-IDs
+**Format:** Comma-separated list of Discord role IDs
 ```env
 ADMIN_ROLE_IDS=123456789012345678,987654321098765432
 ```
 
-**Beispiele:**
+**Examples:**
 ```env
 # Development Environment
 ADMIN_ROLE_IDS=123456789012345678,456789012345678901
@@ -22,37 +22,37 @@ ADMIN_ROLE_IDS=123456789012345678,456789012345678901
 ADMIN_ROLE_IDS=987654321098765432,789012345678901234
 ```
 
-**⚡ Vorteil:** Rollen-IDs bleiben konstant, auch wenn Rollennamen geändert werden!
+**⚡ Advantage:** Role IDs remain constant even when role names are changed!
 
 ### ADMIN_USER_IDS
-Definiert spezifische Discord User-IDs, die Admin-Rechte erhalten (Fallback für Server-Owner).
+Defines specific Discord user IDs that receive admin privileges (fallback for server owners).
 
-**Format:** Komma-getrennte Liste von Discord User-IDs
+**Format:** Comma-separated list of Discord user IDs
 ```env
 ADMIN_USER_IDS=242292116833697792,123456789012345678
 ```
 
-**Beispiele:**
+**Examples:**
 ```env
-# Einzelner Admin
+# Single Admin
 ADMIN_USER_IDS=242292116833697792
 
-# Mehrere Admins
+# Multiple Admins
 ADMIN_USER_IDS=242292116833697792,123456789012345678,987654321098765432
 ```
 
 ## Configuration Steps
 
-### 1. .env Datei bearbeiten
+### 1. Edit .env File
 ```bash
-# Kopiere .env.example zu .env falls noch nicht vorhanden
+# Copy .env.example to .env if not already done
 cp .env.example .env
 
-# Bearbeite .env und setze deine Admin-Konfiguration
+# Edit .env and set your admin configuration
 nano .env
 ```
 
-### 2. Admin-Rollen für dein Environment setzen
+### 2. Set Admin Roles for Your Environment
 
 **Development:**
 ```env
@@ -66,64 +66,64 @@ ADMIN_ROLE_IDS=987654321098765432,789012345678901234
 ADMIN_USER_IDS=242292116833697792,123456789012345678
 ```
 
-### 3. Container neustarten
+### 3. Restart Containers
 ```bash
 # Development
 ./stop.bat && ./start.bat
 
-# Oder einzeln
+# Or individually
 docker-compose -f docker-compose.dev.yml down
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
-## Admin-Rechte Überprüfung
+## Admin Rights Verification
 
-### Automatische Erkennung
-Das System prüft Admin-Rechte in folgender Reihenfolge:
+### Automatic Detection
+The system checks admin rights in the following order:
 
-1. **Rollen-ID-basiert:** User hat eine der `ADMIN_ROLE_IDS` in Discord
-2. **User-ID-basiert:** User-ID ist in `ADMIN_USER_IDS` definiert
+1. **Role ID-based:** User has one of the `ADMIN_ROLE_IDS` in Discord
+2. **User ID-based:** User ID is defined in `ADMIN_USER_IDS`
 
-### Debug-Informationen
-Admin-Status wird im JWT Token gespeichert und in der Navbar angezeigt:
-- ✅ **Admin Badge** wenn Admin-Rechte vorhanden
-- 🚫 **Kein Badge** wenn keine Admin-Rechte
+### Debug Information
+Admin status is stored in the JWT token and displayed in the navbar:
+- ✅ **Admin Badge** when admin rights are present
+- 🚫 **No Badge** when no admin rights
 
 ## Troubleshooting
 
-### Problem: Keine Admin-Rechte trotz korrekter Rolle
-1. **Rolle in Discord prüfen:** Stelle sicher, dass du die Rolle wirklich hast
-2. **Rollennamen prüfen:** Case-insensitive, aber exakte Schreibweise
-3. **Bot neu laden:** Bot muss Rollen-Änderungen erst synchronisieren
-4. **Neu einloggen:** JWT Token muss neu erstellt werden
+### Issue: No Admin Rights Despite Correct Role
+1. **Check Role in Discord:** Ensure you actually have the role
+2. **Check Role Names:** Case-insensitive, but exact spelling
+3. **Reload Bot:** Bot must first synchronize role changes
+4. **Re-login:** JWT token must be recreated
 
-### Problem: 0 Rollen angezeigt
-1. **Bot-Inventarisierung prüfen:** `/initial_inventory` ausführen
-2. **Datenbank prüfen:** Rollen müssen in `roles` Tabelle vorhanden sein
-3. **Container-Logs prüfen:** Fehler in der Auth-Verarbeitung
+### Issue: 0 Roles Displayed
+1. **Check Bot Inventory:** Execute `/initial_inventory`
+2. **Check Database:** Roles must be present in `roles` table
+3. **Check Container Logs:** Errors in auth processing
 
-### Discord User-ID herausfinden
-1. **Discord Developer Mode aktivieren**
-2. **Rechtsklick auf deinen Namen → "ID kopieren"**
-3. **ID in ADMIN_USER_IDS eintragen**
+### Finding Discord User ID
+1. **Enable Discord Developer Mode**
+2. **Right-click on your name → "Copy ID"**
+3. **Enter ID in ADMIN_USER_IDS**
 
-### Discord Rollen-ID herausfinden
-1. **Discord Developer Mode aktivieren** (Einstellungen → Erweitert → Entwicklermodus)
-2. **Server-Einstellungen → Rollen** öffnen
-3. **Rechtsklick auf die gewünschte Rolle → "ID kopieren"**
-4. **ID in ADMIN_ROLE_IDS eintragen**
+### Finding Discord Role ID
+1. **Enable Discord Developer Mode** (Settings → Advanced → Developer Mode)
+2. **Open Server Settings → Roles**
+3. **Right-click on desired role → "Copy ID"**
+4. **Enter ID in ADMIN_ROLE_IDS**
 
-**Alternative über Bot-Commands:**
+**Alternative via Bot Commands:**
 ```
-/info role @RollenName
+/info role @RoleName
 ```
 
 ## Security Best Practices
 
-1. **Minimale Rechte:** Nur notwendige Rollen als Admin definieren
-2. **User-ID Backup:** Mindestens eine User-ID als Fallback
-3. **Environment Separation:** Verschiedene Admin-Konfiguration für Dev/Prod
-4. **Regular Review:** Admin-Liste regelmäßig überprüfen
+1. **Minimal Rights:** Only define necessary roles as admin
+2. **User ID Backup:** At least one user ID as fallback
+3. **Environment Separation:** Different admin configuration for Dev/Prod
+4. **Regular Review:** Review admin list regularly
 
 ## Examples
 
@@ -144,3 +144,24 @@ ADMIN_USER_IDS=242292116833697792,123456789012345678
 ADMIN_ROLE_IDS=111222333444555666,777888999000111222,333444555666777888
 ADMIN_USER_IDS=242292116833697792
 ```
+
+## Admin Features
+
+### Available Admin Functions
+- **Admin Panel:** System statistics and status overview
+- **Database Management:** View database statistics and health
+- **User Data Export:** Export user data for analysis
+- **Data Cleanup:** Clean up old data and duplicate entries
+- **Bot Commands:** Access to admin-only slash commands
+
+### Admin-Only Pages
+- `/admin` - Admin panel with system overview
+- Protected routes automatically check admin status
+- Admin badge displayed in navigation bar
+
+### Admin-Only Bot Commands
+- `/database_stats` - Database statistics
+- `/cleanup_old_data [days]` - Clean up old data
+- `/export_user_data <user>` - Export user data
+- `/cleanup_duplicate_roles` - Clean up duplicate initial role entries
+- `/sync` - Synchronize slash commands
