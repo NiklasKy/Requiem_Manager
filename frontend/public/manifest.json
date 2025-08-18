@@ -1,0 +1,20 @@
+{
+  "short_name": "Requiem Tracking",
+  "name": "Requiem User Tracking Dashboard",
+  "icons": [
+    {
+      "src": "icons/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#5865f2",
+  "background_color": "#1a1a1a"
+}

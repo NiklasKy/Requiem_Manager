@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Discord Bot (Development)
+  bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: requiem-bot-dev
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./src:/app/src  # Mount source for development
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - DATABASE_PATH=/app/data/tracking.db
+      - PYTHONPATH=/app
+    depends_on:
+      - api-dev
+    networks:
+      - requiem-dev-network
+    command: ["python", "-m", "src.bot.main"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # API Backend (Development)
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: requiem-api-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./src:/app/src  # Mount source for development
+    environment:
+      - DATABASE_PATH=/app/data/tracking.db
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PYTHONPATH=/app
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+    networks:
+      - requiem-dev-network
+    command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Frontend (Development with hot reload)
+  frontend-dev:
+    image: node:18-alpine
+    container_name: requiem-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=
+      - REACT_APP_DEFAULT_GUILD_ID=${DISCORD_GUILD_ID}
+      - CHOKIDAR_USEPOLLING=true
+    command: sh -c "npm install && npm start"
+    depends_on:
+      - api-dev
+    networks:
+      - requiem-dev-network
+    stdin_open: true
+    tty: true
+
+networks:
+  requiem-dev-network:
+    driver: bridge
