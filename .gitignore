@@ -119,3 +119,6 @@ dmypy.json
 
 # Certs
 ssl-data/
+renew-ssl.bat
+renew-ssl.ps1
+schedule-ssl-renewal.ps1
