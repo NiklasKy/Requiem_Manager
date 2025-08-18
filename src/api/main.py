@@ -91,6 +91,16 @@ app.add_middleware(
 # Global database instance
 db = None
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy", 
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0"
+    }
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize database connection on startup"""
