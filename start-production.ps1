@@ -329,7 +329,7 @@ try {
 # Check SSL certificate expiry
 if (Test-Path "ssl-data\conf\live\$domain\fullchain.pem") {
     try {
-        $certInfo = docker run --rm -v "$PWD\ssl-data\conf\live\$domain:/certs" alpine/openssl x509 -enddate -noout -in /certs/fullchain.pem 2>$null
+        $certInfo = docker run --rm -v "$PWD\ssl-data\conf\live\${domain}:/certs" alpine/openssl x509 -enddate -noout -in /certs/fullchain.pem 2>$null
         if ($certInfo -match "notAfter=(.+)") {
             $expiryDate = [DateTime]::ParseExact($matches[1], "MMM dd HH:mm:ss yyyy GMT", $null)
             $daysUntilExpiry = ($expiryDate - (Get-Date)).Days
