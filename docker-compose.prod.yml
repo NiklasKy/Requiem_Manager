@@ -13,7 +13,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
       - ./nginx/security.conf:/etc/nginx/conf.d/security.conf:ro
-      - /c/Certbot/live/${DOMAIN}:/etc/nginx/ssl:ro
+      - ./ssl-data/conf/live/${DOMAIN}:/etc/nginx/ssl:ro
       - ./nginx/html:/usr/share/nginx/html:ro
     depends_on:
       - api
