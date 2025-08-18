@@ -327,21 +327,37 @@ try {
 }
 
 # Check SSL certificate expiry
-if (Test-Path "ssl-data\conf\live\${domain}\fullchain.pem") {
+$certPath = "ssl-data\conf\live\${domain}\fullchain.pem"
+if (Test-Path $certPath) {
     try {
-        $certInfo = docker run --rm -v "$PWD\ssl-data\conf\live\${domain}:/certs" alpine/openssl x509 -enddate -noout -in /certs/fullchain.pem 2>$null
-        if ($certInfo -match "notAfter=(.+)") {
-            $expiryDate = [DateTime]::ParseExact($matches[1], "MMM dd HH:mm:ss yyyy GMT", $null)
-            $daysUntilExpiry = ($expiryDate - (Get-Date)).Days
-            
-            if ($daysUntilExpiry -lt 30) {
-                Write-Host "   ⚠️  SSL certificate expires in $daysUntilExpiry days" -ForegroundColor Yellow
-            } else {
-                Write-Host "   ✅ SSL certificate valid for $daysUntilExpiry days" -ForegroundColor Green
+        # Build docker command properly
+        $dockerArgs = @(
+            "run", "--rm",
+            "-v", "${PWD}\ssl-data\conf\live\${domain}:/certs",
+            "alpine/openssl",
+            "x509", "-enddate", "-noout", "-in", "/certs/fullchain.pem"
+        )
+        
+        $certInfo = & docker $dockerArgs 2>$null
+        if ($certInfo -and $certInfo -match "notAfter=(.+)") {
+            $expiryDateString = $matches[1]
+            try {
+                $expiryDate = [DateTime]::ParseExact($expiryDateString, "MMM dd HH:mm:ss yyyy GMT", $null)
+                $daysUntilExpiry = ($expiryDate - (Get-Date)).Days
+                
+                if ($daysUntilExpiry -lt 30) {
+                    Write-Host "   ⚠️  SSL certificate expires in $daysUntilExpiry days" -ForegroundColor Yellow
+                } else {
+                    Write-Host "   ✅ SSL certificate valid for $daysUntilExpiry days" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "   ❓ Could not parse SSL certificate expiry date" -ForegroundColor Gray
             }
+        } else {
+            Write-Host "   ❓ Could not read SSL certificate expiry" -ForegroundColor Gray
         }
     } catch {
-        Write-Host "   ❓ Could not check SSL certificate expiry" -ForegroundColor Gray
+        Write-Host "   ❓ Could not check SSL certificate expiry: $_" -ForegroundColor Gray
     }
 }
 
