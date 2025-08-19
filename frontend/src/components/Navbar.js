@@ -97,7 +97,7 @@ const Navbar = () => {
             }}
           >
             <img
-              src="/icons/requiem-logo.png"
+              src="/icons/Requiem-logo.png"
               alt="Requiem Logo"
               style={{
                 width: '32px',
