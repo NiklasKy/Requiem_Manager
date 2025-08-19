@@ -1,4 +1,3 @@
-#!/usr/bin/env pwsh
 # CloudFlare SSL Setup Script for Requiem Manager
 
 param(
