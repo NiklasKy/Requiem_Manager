@@ -604,22 +604,22 @@ class Database:
             return data
     
     async def _log_initial_role(self, member: discord.Member, role: discord.Role):
-        """Log initial role during inventory (only if no role history exists for this user)"""
+        """Log initial role during inventory (only if no role history exists for this specific role)"""
         # First ensure the role exists in the roles table
         await self.upsert_role(role)
         
         async with aiosqlite.connect(self.db_path) as db:
-            # Check if this user already has ANY role history entries
+            # Check if this user already has THIS SPECIFIC role in history
             cursor = await db.execute("""
                 SELECT COUNT(*) FROM role_changes 
-                WHERE user_id = ? AND guild_id = ?
-            """, (member.id, member.guild.id))
+                WHERE user_id = ? AND guild_id = ? AND role_id = ?
+            """, (member.id, member.guild.id, role.id))
             
-            role_history_count = (await cursor.fetchone())[0]
+            role_specific_count = (await cursor.fetchone())[0]
             
-            # Only log initial roles if the user has NO previous role history
-            if role_history_count == 0:
-                # This is the first time we're tracking this user's roles
+            # Only log initial role if this specific role hasn't been tracked before
+            if role_specific_count == 0:
+                # This is the first time we're tracking this specific role for this user
                 await db.execute("""
                     INSERT INTO role_changes (guild_id, user_id, role_id, action, changed_at)
                     VALUES (?, ?, ?, ?, ?)
@@ -631,10 +631,10 @@ class Database:
                     datetime.utcnow()
                 ))
                 await db.commit()
-                logger.debug(f"Logged initial role {role.name} for new user {member.display_name}")
+                logger.debug(f"Logged initial role {role.name} for user {member.display_name}")
             else:
-                # User already has role history, skip initial logging
-                logger.debug(f"Skipping initial role logging for {member.display_name} (already has {role_history_count} role history entries)")
+                # This specific role already exists in history, skip
+                logger.debug(f"Skipping initial role logging for {member.display_name} - role {role.name} already tracked")
     
     async def cleanup_duplicate_initial_roles(self):
         """Clean up duplicate 'initial' role entries, keeping only the oldest one per user/role combination"""
