@@ -3,7 +3,7 @@
 param(
     [Parameter(Mandatory=$true)]
     [string]$Domain,
-    [string]$SSLPath = "ssl-data"
+    [string]$SSLPath = "ssl-data\conf"
 )
 
 # Colors for output

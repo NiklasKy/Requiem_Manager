@@ -94,7 +94,7 @@ Write-ColorMessage "[SUCCESS] Environment loaded" "Green"
 if (-not $SkipSSLCheck) {
     Write-ColorMessage "[INFO] Checking SSL certificate..." "Yellow"
     $domain = $env["DOMAIN"]
-    $sslPath = "ssl-data\live\$domain\fullchain.pem"
+    $sslPath = "ssl-data\conf\live\$domain\fullchain.pem"
     
     if (Test-Path $sslPath) {
         Write-ColorMessage "[SUCCESS] SSL certificate found: $sslPath" "Green"
