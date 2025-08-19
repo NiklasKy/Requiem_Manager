@@ -33,6 +33,8 @@ const Users = () => {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(null);
+  const [bulkRoles, setBulkRoles] = useState({});
+  const [loadingRoles, setLoadingRoles] = useState(false);
   const navigate = useNavigate();
 
   // Default guild ID - in a real app, this would come from user selection
@@ -44,11 +46,40 @@ const Users = () => {
       setError(null);
       const data = await apiService.getGuildUsers(defaultGuildId);
       setUsers(data);
+      
+      // Load roles for all users in bulk
+      await loadBulkRoles(data);
     } catch (err) {
       console.error('Error loading users:', err);
       setError('Failed to load users. Please check if the API is running.');
     } finally {
       setLoading(false);
+    }
+  }, [defaultGuildId]);
+
+  const loadBulkRoles = useCallback(async (usersData) => {
+    try {
+      setLoadingRoles(true);
+      const userIds = usersData.map(user => user.user_id);
+      
+      // Split into chunks to avoid URL length limits
+      const chunkSize = 100;
+      const chunks = [];
+      for (let i = 0; i < userIds.length; i += chunkSize) {
+        chunks.push(userIds.slice(i, i + chunkSize));
+      }
+      
+      const allRoles = {};
+      for (const chunk of chunks) {
+        const rolesData = await apiService.getBulkUserRoles(chunk, defaultGuildId);
+        Object.assign(allRoles, rolesData);
+      }
+      
+      setBulkRoles(allRoles);
+    } catch (err) {
+      console.error('Error loading bulk roles:', err);
+    } finally {
+      setLoadingRoles(false);
     }
   }, [defaultGuildId]);
 
@@ -88,29 +119,12 @@ const Users = () => {
   };
 
   const UserCardWithRoles = ({ user, showGuildInfo = true }) => {
-    const [roles, setRoles] = useState([]);
-    const [loadingRoles, setLoadingRoles] = useState(false);
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
 
-    const loadUserRoles = useCallback(async () => {
-      try {
-        setLoadingRoles(true);
-        const roleData = await apiService.getUserCurrentRoles(user.user_id, defaultGuildId);
-        setRoles(roleData);
-      } catch (err) {
-        console.error('Error loading user roles:', err);
-        setRoles([]);
-      } finally {
-        setLoadingRoles(false);
-      }
-    }, [user.user_id]);
-
-    useEffect(() => {
-      if (showGuildInfo && user.user_id) {
-        loadUserRoles();
-      }
-    }, [user.user_id, showGuildInfo, loadUserRoles]);
+    // Get roles from bulk data instead of individual API calls
+    const roles = showGuildInfo ? (bulkRoles[user.user_id] || []) : [];
+    const isLoadingRoles = loadingRoles;
 
     return (
       <Box
@@ -236,20 +250,20 @@ const Users = () => {
           {/* Roles Section */}
           {showGuildInfo && (
             <Box mb={3} flex={1}>
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  mb: 1.5, 
-                  display: 'block',
-                  color: alpha('#ffffff', 0.8),
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}
-              >
-                🛡️ Roles ({roles.length})
-              </Typography>
-              {loadingRoles ? (
+                                      <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            mb: 1.5, 
+                            display: 'block',
+                            color: alpha('#ffffff', 0.8),
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}
+                        >
+                          🛡️ Roles ({roles.length})
+                        </Typography>
+                        {isLoadingRoles ? (
                 <Box display="flex" gap={1} flexWrap="wrap">
                   {[1, 2, 3].map((i) => (
                     <Skeleton 

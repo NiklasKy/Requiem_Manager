@@ -313,6 +313,71 @@ async def get_user_current_roles(user_id: str, guild_id: int = Query(...)):
         logger.error(f"Error getting user current roles: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/api/servers/{guild_id}/users/bulk-roles")
+async def get_bulk_user_roles(guild_id: int, user_ids: str = Query(...)):
+    """Get current active roles for multiple users in a guild (bulk operation)"""
+    try:
+        # Parse comma-separated user IDs
+        user_id_list = [int(uid.strip()) for uid in user_ids.split(',') if uid.strip()]
+        
+        if not user_id_list:
+            return {}
+        
+        # Limit to prevent abuse
+        if len(user_id_list) > 1000:
+            raise HTTPException(status_code=400, detail="Too many user IDs (max 1000)")
+        
+        import aiosqlite
+        async with aiosqlite.connect(db.db_path) as conn:
+            # Create placeholders for the IN clause
+            placeholders = ','.join('?' * len(user_id_list))
+            
+            # Get current roles for all users in one query
+            cursor = await conn.execute(f"""
+                SELECT rc.user_id, rc.role_id, r.name, r.color, r.position
+                FROM role_changes rc
+                INNER JOIN (
+                    SELECT role_id, user_id, MAX(changed_at) as latest_change
+                    FROM role_changes 
+                    WHERE user_id IN ({placeholders}) AND guild_id = ?
+                    GROUP BY role_id, user_id
+                ) latest ON rc.role_id = latest.role_id 
+                           AND rc.user_id = latest.user_id 
+                           AND rc.changed_at = latest.latest_change
+                INNER JOIN roles r ON rc.role_id = r.role_id
+                WHERE rc.action IN ('added', 'initial')
+                ORDER BY rc.user_id, r.position DESC
+            """, user_id_list + [guild_id])
+            
+            roles_data = await cursor.fetchall()
+            
+            def int_to_hex_color(color_int):
+                """Convert Discord color integer to hex string"""
+                if color_int is None or color_int == 0:
+                    return "#99aab5"  # Discord default role color
+                return f"#{color_int:06x}"
+            
+            # Group roles by user_id
+            user_roles = {}
+            for row in roles_data:
+                user_id = str(row[0])
+                role_data = {
+                    "role_id": str(row[1]),
+                    "role_name": row[2],
+                    "color": int_to_hex_color(row[3]),
+                    "position": row[4]
+                }
+                
+                if user_id not in user_roles:
+                    user_roles[user_id] = []
+                user_roles[user_id].append(role_data)
+            
+            return user_roles
+        
+    except Exception as e:
+        logger.error(f"Error getting bulk user roles: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/api/users/search")
 async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(None)):
     """Search for users by username, display name, or role name"""

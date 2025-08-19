@@ -80,6 +80,15 @@ export const apiService = {
     return response.data;
   },
 
+  // Get bulk user roles (performance optimization)
+  async getBulkUserRoles(userIds, guildId) {
+    const userIdsString = userIds.join(',');
+    const response = await api.get(`/api/servers/${guildId}/users/bulk-roles`, {
+      params: { user_ids: userIdsString }
+    });
+    return response.data;
+  },
+
   // Get guild users
   async getGuildUsers(guildId, activeOnly = true) {
     const response = await api.get(`/api/servers/${guildId}/users`, {
