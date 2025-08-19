@@ -36,7 +36,7 @@ $CertPath = "$SSLPath/live/$Domain"
 Write-ColorOutput "`n🔐 CloudFlare Origin Certificate Setup" $Green
 Write-ColorOutput "=" * 40 $Green
 
-Write-ColorOutput @"
+$instructions = @"
 📋 Folge diesen Schritten in CloudFlare:
 
 1️⃣  Gehe zu CloudFlare Dashboard → SSL/TLS → Origin Server
@@ -53,7 +53,9 @@ Write-ColorOutput @"
     - Private Key
 
 6️⃣  Kopiere die Inhalte in folgende Dateien:
-"@ $Yellow
+"@
+
+Write-ColorOutput $instructions $Yellow
 
 Write-ColorOutput "`n📄 Erstelle diese Dateien:" $Blue
 
