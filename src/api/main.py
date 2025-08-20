@@ -54,10 +54,19 @@ class ServerStats(BaseModel):
 
 class ChangeEvent(BaseModel):
     type: str
-    user_id: int
+    user_id: str  # Changed to string to prevent JavaScript precision loss
     old_value: Optional[str]
     new_value: Optional[str]
     timestamp: datetime
+    # User info
+    username: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    # Role-specific fields (only for role changes)
+    role_id: Optional[int] = None
+    role_name: Optional[str] = None
+    role_color: Optional[int] = None  # Discord role colors are integers
+    action: Optional[str] = None
 
 class RoleChange(BaseModel):
     role_id: int
@@ -211,17 +220,24 @@ async def get_server_stats(guild_id: int):
 
 @app.get("/api/servers/{guild_id}/recent-changes", response_model=List[ChangeEvent])
 async def get_recent_changes(guild_id: int, limit: int = Query(10, ge=1, le=100)):
-    """Get recent username and nickname changes for a server"""
+    """Get recent username, nickname, and role changes for a server"""
     try:
         changes = await db.get_recent_changes(guild_id, limit)
         
         return [
             ChangeEvent(
                 type=change['type'],
-                user_id=change['user_id'],
+                user_id=str(change['user_id']),  # Convert to string to prevent JavaScript precision loss
                 old_value=change['old_value'],
                 new_value=change['new_value'],
-                timestamp=change['timestamp']
+                timestamp=change['timestamp'],
+                username=change.get('username'),
+                display_name=change.get('display_name'),
+                avatar_url=change.get('avatar_url'),
+                role_id=change.get('role_id'),
+                role_name=change.get('role_name'),
+                role_color=change.get('role_color'),
+                action=change.get('action')
             )
             for change in changes
         ]

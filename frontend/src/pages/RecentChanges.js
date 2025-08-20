@@ -23,6 +23,7 @@ import {
   FilterList as FilterIcon,
   Timeline as TimelineIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import ModernPageLayout from '../components/ModernPageLayout';
 import ModernCard from '../components/ModernCard';
 import { apiService } from '../services/api';
@@ -33,6 +34,7 @@ const RecentChanges = () => {
   const [error, setError] = useState(null);
   const [limit, setLimit] = useState(50);
   const [filterType, setFilterType] = useState('all');
+  const navigate = useNavigate();
 
   // Default guild ID
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
@@ -55,6 +57,12 @@ const RecentChanges = () => {
     }
   };
 
+  const handleUserClick = (userId) => {
+    // Ensure userId is treated as string to prevent precision loss
+    const userIdStr = String(userId);
+    navigate(`/users/${userIdStr}?guild=${defaultGuildId}`);
+  };
+
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();
   };
@@ -65,6 +73,8 @@ const RecentChanges = () => {
         return 'primary';
       case 'nickname':
         return 'secondary';
+      case 'role':
+        return 'warning';
       default:
         return 'default';
     }
@@ -76,6 +86,8 @@ const RecentChanges = () => {
         return '@';
       case 'nickname':
         return '#';
+      case 'role':
+        return '🛡️';
       default:
         return '?';
     }
@@ -214,6 +226,7 @@ const RecentChanges = () => {
               <MenuItem value="all">🔍 All Types</MenuItem>
               <MenuItem value="username">👤 Username Changes</MenuItem>
               <MenuItem value="nickname">🏷️ Nickname Changes</MenuItem>
+              <MenuItem value="role">🛡️ Role Changes</MenuItem>
             </TextField>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -390,77 +403,191 @@ const RecentChanges = () => {
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={2}>
                         <Avatar 
+                          src={change.avatar_url}
                           sx={{ 
                             width: 32, 
                             height: 32, 
                             fontSize: '0.8rem',
-                            background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                            background: change.avatar_url ? 'transparent' : 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
                             color: 'white',
                             fontWeight: 'bold'
                           }}
                         >
-                          {change.user_id.toString().slice(-2)}
+                          {!change.avatar_url && (change.display_name ? change.display_name.charAt(0).toUpperCase() : change.user_id.toString().slice(-2))}
                         </Avatar>
-                        <Typography 
-                          variant="body2"
-                          sx={{ 
-                            color: alpha('#ffffff', 0.9),
-                            fontFamily: 'monospace'
-                          }}
-                        >
-                          ID: {change.user_id}
-                        </Typography>
+                        <Box>
+                          <Typography 
+                            variant="body2"
+                            onClick={() => handleUserClick(change.user_id)}
+                            sx={{ 
+                              color: alpha('#ffffff', 0.95),
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                color: '#5865f2',
+                                textDecoration: 'underline'
+                              }
+                            }}
+                          >
+                            {change.display_name || change.username || `User ${change.user_id}`}
+                          </Typography>
+                          <Typography 
+                            variant="caption"
+                            onClick={() => handleUserClick(change.user_id)}
+                            sx={{ 
+                              color: alpha('#ffffff', 0.6),
+                              fontFamily: 'monospace',
+                              fontSize: '0.7rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                color: alpha('#5865f2', 0.8)
+                              }
+                            }}
+                          >
+                            @{change.username || change.user_id}
+                          </Typography>
+                        </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Box
-                        sx={{
-                          maxWidth: 200,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          p: 1,
-                          borderRadius: 1,
-                          background: alpha('#f44336', 0.1),
-                          border: `1px solid ${alpha('#f44336', 0.3)}`
-                        }}
-                      >
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            textDecoration: 'line-through',
-                            color: alpha('#ffffff', 0.7),
-                            fontStyle: change.old_value ? 'normal' : 'italic'
+                      {change.type === 'role' ? (
+                        // Special handling for role changes
+                        change.action === 'removed' ? (
+                          <Box
+                            sx={{
+                              maxWidth: 200,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              p: 1,
+                              borderRadius: 1,
+                              background: alpha('#f44336', 0.15),
+                              border: `1px solid ${alpha('#f44336', 0.4)}`
+                            }}
+                          >
+                            <Chip
+                              label={change.role_name}
+                              size="small"
+                              sx={{
+                                backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
+                                color: 'white',
+                                fontWeight: 600,
+                                '& .MuiChip-deleteIcon': {
+                                  color: 'white'
+                                }
+                              }}
+                              deleteIcon={<Typography sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}>❌</Typography>}
+                              onDelete={() => {}} // Just for the icon
+                            />
+                          </Box>
+                        ) : (
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: alpha('#ffffff', 0.6),
+                              fontStyle: 'italic'
+                            }}
+                          >
+                            (none)
+                          </Typography>
+                        )
+                      ) : (
+                        // Regular handling for username/nickname changes
+                        <Box
+                          sx={{
+                            maxWidth: 200,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            p: 1,
+                            borderRadius: 1,
+                            background: alpha('#f44336', 0.1),
+                            border: `1px solid ${alpha('#f44336', 0.3)}`
                           }}
                         >
-                          {change.old_value || '(none)'}
-                        </Typography>
-                      </Box>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              textDecoration: 'line-through',
+                              color: alpha('#ffffff', 0.7),
+                              fontStyle: change.old_value ? 'normal' : 'italic'
+                            }}
+                          >
+                            {change.old_value || '(none)'}
+                          </Typography>
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Box
-                        sx={{
-                          maxWidth: 200,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          p: 1,
-                          borderRadius: 1,
-                          background: alpha('#4caf50', 0.1),
-                          border: `1px solid ${alpha('#4caf50', 0.3)}`
-                        }}
-                      >
-                        <Typography 
-                          variant="body2"
-                          sx={{ 
-                            fontWeight: 600,
-                            color: alpha('#ffffff', 0.9),
-                            fontStyle: change.new_value ? 'normal' : 'italic'
+                      {change.type === 'role' ? (
+                        // Special handling for role changes
+                        change.action === 'added' ? (
+                          <Box
+                            sx={{
+                              maxWidth: 200,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              p: 1,
+                              borderRadius: 1,
+                              background: alpha('#4caf50', 0.15),
+                              border: `1px solid ${alpha('#4caf50', 0.4)}`
+                            }}
+                          >
+                            <Chip
+                              label={change.role_name}
+                              size="small"
+                              sx={{
+                                backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
+                                color: 'white',
+                                fontWeight: 600,
+                                '& .MuiChip-deleteIcon': {
+                                  color: 'white'
+                                }
+                              }}
+                              deleteIcon={<Typography sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}>✅</Typography>}
+                              onDelete={() => {}} // Just for the icon
+                            />
+                          </Box>
+                        ) : (
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: alpha('#ffffff', 0.6),
+                              fontStyle: 'italic'
+                            }}
+                          >
+                            (none)
+                          </Typography>
+                        )
+                      ) : (
+                        // Regular handling for username/nickname changes
+                        <Box
+                          sx={{
+                            maxWidth: 200,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            p: 1,
+                            borderRadius: 1,
+                            background: alpha('#4caf50', 0.1),
+                            border: `1px solid ${alpha('#4caf50', 0.3)}`
                           }}
                         >
-                          {change.new_value || '(none)'}
-                        </Typography>
-                      </Box>
+                          <Typography 
+                            variant="body2"
+                            sx={{ 
+                              fontWeight: 600,
+                              color: alpha('#ffffff', 0.9),
+                              fontStyle: change.new_value ? 'normal' : 'italic'
+                            }}
+                          >
+                            {change.new_value || '(none)'}
+                          </Typography>
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Typography 

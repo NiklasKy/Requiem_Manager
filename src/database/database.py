@@ -354,12 +354,12 @@ class Database:
             if not user_data:
                 return {}
             
-            # Get change counts
+            # Get change counts (excluding initial role assignments)
             cursor = await db.execute("""
                 SELECT 
                     (SELECT COUNT(*) FROM username_changes WHERE user_id = ?) as username_changes,
                     (SELECT COUNT(*) FROM nickname_changes WHERE user_id = ?) as nickname_changes,
-                    (SELECT COUNT(*) FROM role_changes WHERE user_id = ?) as role_changes
+                    (SELECT COUNT(*) FROM role_changes WHERE user_id = ? AND action != 'initial') as role_changes
             """, (user_id, user_id, user_id))
             
             stats = await cursor.fetchone()
@@ -374,7 +374,7 @@ class Database:
     async def get_server_stats(self, guild_id: int) -> Dict[str, Any]:
         """Get statistics for a specific server"""
         async with aiosqlite.connect(self.db_path) as db:
-            # Get total counts
+            # Get total counts (excluding initial role assignments)
             cursor = await db.execute("""
                 SELECT 
                     (SELECT COUNT(DISTINCT user_id) FROM guild_members WHERE guild_id = ?) as total_users,
@@ -382,7 +382,7 @@ class Database:
                      JOIN guild_members gm ON uc.user_id = gm.user_id 
                      WHERE gm.guild_id = ?) as total_username_changes,
                     (SELECT COUNT(*) FROM nickname_changes WHERE guild_id = ?) as total_nickname_changes,
-                    (SELECT COUNT(*) FROM role_changes WHERE guild_id = ?) as total_role_changes
+                    (SELECT COUNT(*) FROM role_changes WHERE guild_id = ? AND action != 'initial') as total_role_changes
             """, (guild_id, guild_id, guild_id, guild_id))
             
             stats = await cursor.fetchone()
@@ -412,48 +412,81 @@ class Database:
             }
     
     async def get_recent_changes(self, guild_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent username and nickname changes"""
+        """Get recent username, nickname, and role changes (excluding initial roles)"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute("""
                 SELECT 'username' as type, uc.user_id, old_username as old_value, 
-                       new_username as new_value, changed_at as timestamp
+                       new_username as new_value, changed_at as timestamp, 
+                       NULL as role_id, NULL as role_name, NULL as role_color, NULL as action,
+                       u.username, u.display_name, u.avatar_url
                 FROM username_changes uc
                 JOIN guild_members gm ON uc.user_id = gm.user_id
+                JOIN users u ON uc.user_id = u.user_id
                 WHERE gm.guild_id = ?
                 
                 UNION ALL
                 
                 SELECT 'nickname' as type, nc.user_id, old_nickname as old_value,
-                       new_nickname as new_value, changed_at as timestamp
+                       new_nickname as new_value, changed_at as timestamp,
+                       NULL as role_id, NULL as role_name, NULL as role_color, NULL as action,
+                       u.username, u.display_name, u.avatar_url
                 FROM nickname_changes nc
+                JOIN users u ON nc.user_id = u.user_id
                 WHERE nc.guild_id = ?
+                
+                UNION ALL
+                
+                SELECT 'role' as type, rc.user_id, 
+                       CASE WHEN rc.action = 'removed' THEN r.name ELSE NULL END as old_value,
+                       CASE WHEN rc.action = 'added' THEN r.name ELSE NULL END as new_value,
+                       rc.changed_at as timestamp,
+                       r.role_id, r.name as role_name, r.color as role_color, rc.action,
+                       u.username, u.display_name, u.avatar_url
+                FROM role_changes rc
+                JOIN roles r ON rc.role_id = r.role_id
+                JOIN users u ON rc.user_id = u.user_id
+                WHERE rc.guild_id = ? AND rc.action != 'initial'
                 
                 ORDER BY timestamp DESC
                 LIMIT ?
-            """, (guild_id, guild_id, limit))
+            """, (guild_id, guild_id, guild_id, limit))
             
             rows = await cursor.fetchall()
             
             changes = []
             for row in rows:
-                changes.append({
+                change_data = {
                     'type': row[0],
                     'user_id': row[1],
                     'old_value': row[2],
                     'new_value': row[3],
-                    'timestamp': datetime.fromisoformat(row[4])
-                })
+                    'timestamp': datetime.fromisoformat(row[4]),
+                    'username': row[9],
+                    'display_name': row[10],
+                    'avatar_url': row[11]
+                }
+                
+                # Add role-specific data if this is a role change
+                if row[0] == 'role':
+                    change_data.update({
+                        'role_id': row[5],
+                        'role_name': row[6],
+                        'role_color': row[7],
+                        'action': row[8]
+                    })
+                
+                changes.append(change_data)
             
             return changes
     
     async def get_role_history(self, user_id, guild_id: int) -> List[Dict[str, Any]]:
-        """Get role change history for a user"""
+        """Get role change history for a user (excluding initial role assignments)"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute("""
                 SELECT rc.role_id, r.name as role_name, rc.action, rc.changed_at
                 FROM role_changes rc
                 INNER JOIN roles r ON rc.role_id = r.role_id
-                WHERE rc.user_id = ? AND rc.guild_id = ?
+                WHERE rc.user_id = ? AND rc.guild_id = ? AND rc.action != 'initial'
                 ORDER BY rc.changed_at DESC
             """, (user_id, guild_id))
             
@@ -471,14 +504,14 @@ class Database:
             return history
     
     async def get_database_stats(self) -> Dict[str, int]:
-        """Get overall database statistics"""
+        """Get overall database statistics (excluding initial role assignments)"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute("""
                 SELECT 
                     (SELECT COUNT(*) FROM users) as user_count,
                     (SELECT COUNT(*) FROM username_changes) as username_changes,
                     (SELECT COUNT(*) FROM nickname_changes) as nickname_changes,
-                    (SELECT COUNT(*) FROM role_changes) as role_changes,
+                    (SELECT COUNT(*) FROM role_changes WHERE action != 'initial') as role_changes,
                     (SELECT COUNT(*) FROM join_leave_events) as join_leave_events
             """)
             

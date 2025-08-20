@@ -18,6 +18,7 @@ import {
   Today as TodayIcon,
   Dashboard as DashboardIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -39,6 +40,7 @@ const Dashboard = () => {
   const [recentChanges, setRecentChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   // Default guild ID - in a real app, this would come from user selection or environment
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
@@ -71,12 +73,20 @@ const Dashboard = () => {
     return new Date(timestamp).toLocaleString();
   };
 
+  const handleUserClick = (userId) => {
+    // Ensure userId is treated as string to prevent precision loss
+    const userIdStr = String(userId);
+    navigate(`/users/${userIdStr}?guild=${defaultGuildId}`);
+  };
+
   const getChangeTypeColor = (type) => {
     switch (type) {
       case 'username':
         return 'primary';
       case 'nickname':
         return 'secondary';
+      case 'role':
+        return 'warning';
       default:
         return 'default';
     }
@@ -333,9 +343,10 @@ const Dashboard = () => {
                       background: alpha('#ffffff', 0.05),
                       border: `1px solid ${alpha('#ffffff', 0.1)}`,
                       transition: 'all 0.2s ease',
+                      overflow: 'hidden', // Prevent horizontal scroll
                       '&:hover': {
                         background: alpha('#ffffff', 0.1),
-                        transform: 'translateX(4px)',
+                        border: `1px solid ${alpha('#ffffff', 0.2)}`,
                       }
                     }}
                   >
@@ -351,21 +362,82 @@ const Dashboard = () => {
                       />
                       <Typography 
                         variant="body2" 
-                        sx={{ color: alpha('#ffffff', 0.7) }}
+                        onClick={() => handleUserClick(change.user_id)}
+                        sx={{ 
+                          color: alpha('#ffffff', 0.9),
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            color: '#5865f2',
+                            textDecoration: 'underline'
+                          }
+                        }}
                       >
-                        User {change.user_id}
+                        {change.display_name || change.username || `User ${change.user_id}`}
                       </Typography>
                     </Box>
-                    <Typography 
-                      variant="body2" 
-                      noWrap
-                      sx={{ 
-                        color: alpha('#ffffff', 0.9),
-                        fontWeight: 500
-                      }}
-                    >
-                      {change.old_value} → {change.new_value}
-                    </Typography>
+                    
+                    {/* Role Changes with special display */}
+                    {change.type === 'role' ? (
+                      <Box display="flex" alignItems="center" gap={1} mb={1}>
+                        <Typography
+                          sx={{
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold',
+                            color: change.action === 'added' ? '#4caf50' : '#f44336'
+                          }}
+                        >
+                          {change.action === 'added' ? '+' : '−'}
+                        </Typography>
+                        <Chip
+                          label={change.role_name}
+                          size="small"
+                          sx={{
+                            backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
+                            color: 'white',
+                            fontWeight: 600,
+                            fontSize: '0.75rem'
+                          }}
+                        />
+                      </Box>
+                    ) : (
+                      /* Username/Nickname Changes */
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: alpha('#ffffff', 0.8),
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          mb: 1
+                        }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{
+                            textDecoration: 'line-through',
+                            color: alpha('#ffffff', 0.6),
+                            marginRight: 1
+                          }}
+                        >
+                          {change.old_value || '(none)'}
+                        </Box>
+                        →
+                        <Box
+                          component="span"
+                          sx={{
+                            fontWeight: 600,
+                            color: alpha('#ffffff', 0.9),
+                            marginLeft: 1
+                          }}
+                        >
+                          {change.new_value || '(none)'}
+                        </Box>
+                      </Typography>
+                    )}
+                    
                     <Typography 
                       variant="caption" 
                       sx={{ color: alpha('#ffffff', 0.6) }}

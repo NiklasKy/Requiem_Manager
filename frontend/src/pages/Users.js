@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useDebounce } from '../hooks/useDebounce';
 import ModernPageLayout from '../components/ModernPageLayout';
 import ModernCard from '../components/ModernCard';
 
@@ -39,6 +40,9 @@ const Users = () => {
 
   // Default guild ID - in a real app, this would come from user selection
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
+
+  // Debounce search query to avoid API spam (500ms delay)
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -86,26 +90,26 @@ const Users = () => {
   const searchUsers = useCallback(async () => {
     try {
       setSearching(true);
-      const data = await apiService.searchUsers(searchQuery, defaultGuildId);
+      const data = await apiService.searchUsers(debouncedSearchQuery, defaultGuildId);
       setSearchResults(data);
     } catch (err) {
       console.error('Error searching users:', err);
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, defaultGuildId]);
+  }, [debouncedSearchQuery, defaultGuildId]);
 
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
 
   useEffect(() => {
-    if (searchQuery.length >= 2) {
+    if (debouncedSearchQuery.length >= 2) {
       searchUsers();
     } else {
       setSearchResults([]);
     }
-  }, [searchQuery, searchUsers]);
+  }, [debouncedSearchQuery, searchUsers]);
 
   const handleUserClick = (userId) => {
     // Ensure userId is treated as string to prevent precision loss
