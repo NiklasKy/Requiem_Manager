@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography,
   Grid,
@@ -7,19 +7,11 @@ import {
   Alert,
   Avatar,
   Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Divider,
   Skeleton,
   useTheme,
   alpha
 } from '@mui/material';
 import {
-  Person as PersonIcon,
   Edit as EditIcon,
   Security as SecurityIcon,
   History as HistoryIcon,
@@ -43,11 +35,7 @@ const UserDetail = () => {
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    loadUserData();
-  }, [userId, guildId]);
-
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
     try {
       setLoading(true);
       setLoadingRoles(true);
@@ -69,7 +57,11 @@ const UserDetail = () => {
       setLoading(false);
       setLoadingRoles(false);
     }
-  };
+  }, [userId, guildId]);
+
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();

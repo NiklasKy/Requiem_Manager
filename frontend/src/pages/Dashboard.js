@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography,
   Grid,
@@ -23,8 +23,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -50,11 +48,7 @@ const Dashboard = () => {
   // Default guild ID - in a real app, this would come from user selection or environment
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -74,7 +68,11 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [defaultGuildId]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();
@@ -92,18 +90,7 @@ const Dashboard = () => {
     }
   };
 
-  const getChangeTypeColor = (type) => {
-    switch (type) {
-      case 'username':
-        return 'primary';
-      case 'nickname':
-        return 'secondary';
-      case 'role':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
+
 
   const getChangeTypeIcon = (type) => {
     switch (type) {
