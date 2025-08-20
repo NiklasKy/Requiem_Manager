@@ -102,6 +102,79 @@ const Dashboard = () => {
     }
   };
 
+  const getChangeTypeIcon = (type) => {
+    switch (type) {
+      case 'username':
+        return '@';
+      case 'nickname':
+        return '#';
+      case 'role':
+        return '🛡️';
+      default:
+        return '?';
+    }
+  };
+
+  // Get custom styling for change type chips to ensure visibility in dark mode
+  const getChangeTypeChipStyle = (type) => {
+    const baseStyle = {
+      fontWeight: 600,
+      fontSize: '0.75rem',
+      color: '#ffffff',
+      textShadow: '0 1px 2px rgba(0,0,0,0.7)'
+    };
+
+    switch (type) {
+      case 'username':
+        return {
+          ...baseStyle,
+          backgroundColor: '#5865f2', // Discord Blurple
+          '&:hover': { backgroundColor: '#4752c4' }
+        };
+      case 'nickname':
+        return {
+          ...baseStyle,
+          backgroundColor: '#43b581', // Discord Green
+          '&:hover': { backgroundColor: '#3ca374' }
+        };
+      case 'role':
+        return {
+          ...baseStyle,
+          backgroundColor: '#faa61a', // Discord Orange
+          color: '#000000', // Black text for better contrast on orange
+          textShadow: 'none',
+          '&:hover': { backgroundColor: '#e8940f' }
+        };
+      default:
+        return {
+          ...baseStyle,
+          backgroundColor: '#99aab5',
+          color: '#2c2f33',
+          textShadow: 'none',
+          '&:hover': { backgroundColor: '#87909c' }
+        };
+    }
+  };
+
+  // Helper function to get better text color based on background
+  const getContrastTextColor = (hexColor) => {
+    if (!hexColor) return isDark ? '#ffffff' : '#000000';
+    
+    // Remove # if present
+    const color = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(color.substr(0, 2), 16);
+    const g = parseInt(color.substr(2, 2), 16);
+    const b = parseInt(color.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark colors, dark for light colors
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
+
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -425,11 +498,22 @@ const Dashboard = () => {
                       <Chip
                         label={change.type}
                         size="small"
-                        color={getChangeTypeColor(change.type)}
-                        sx={{
-                          fontWeight: 600,
-                          fontSize: '0.75rem'
-                        }}
+                        sx={getChangeTypeChipStyle(change.type)}
+                        icon={
+                          <Box 
+                            sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              width: 16,
+                              height: 16,
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {getChangeTypeIcon(change.type)}
+                          </Box>
+                        }
                       />
                       <Typography 
                         variant="body2" 
@@ -466,9 +550,12 @@ const Dashboard = () => {
                           size="small"
                           sx={{
                             backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
-                            color: 'white',
+                            color: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5'),
                             fontWeight: 600,
-                            fontSize: '0.75rem'
+                            fontSize: '0.75rem',
+                            '& .MuiChip-label': {
+                              textShadow: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5') === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.7)' : 'none'
+                            }
                           }}
                         />
                       </Box>

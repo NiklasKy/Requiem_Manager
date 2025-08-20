@@ -75,16 +75,29 @@ const UserDetail = () => {
     return new Date(timestamp).toLocaleString();
   };
 
-  const getActionColor = (action) => {
-    return action === 'added' ? 'success' : 'error';
-  };
 
-  const getActionIcon = (action) => {
-    return action === 'added' ? '+' : '-';
-  };
 
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+
+  // Helper function to get better text color based on background
+  const getContrastTextColor = (hexColor) => {
+    if (!hexColor) return isDark ? '#ffffff' : '#000000';
+    
+    // Remove # if present
+    const color = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(color.substr(0, 2), 16);
+    const g = parseInt(color.substr(2, 2), 16);
+    const b = parseInt(color.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark colors, dark for light colors
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
 
   if (loading) {
     return (
@@ -331,7 +344,7 @@ const UserDetail = () => {
                   label={role.role_name}
                   sx={{
                     backgroundColor: role.color,
-                    color: '#ffffff',
+                    color: getContrastTextColor(role.color),
                     fontWeight: 'bold',
                     fontSize: '0.9rem',
                     height: '36px',
@@ -344,16 +357,9 @@ const UserDetail = () => {
                       boxShadow: '0 6px 20px rgba(0,0,0,0.4)',
                     },
                     '& .MuiChip-label': {
-                      textShadow: '0 1px 2px rgba(0,0,0,0.7)',
+                      textShadow: getContrastTextColor(role.color) === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.7)' : 'none',
                       px: 1
-                    },
-                    // Better contrast for light colors
-                    ...(role.color === '#99aab5' && {
-                      color: '#2c2f33',
-                      '& .MuiChip-label': {
-                        textShadow: 'none',
-                      },
-                    }),
+                    }
                   }}
                 />
               ))
@@ -390,7 +396,7 @@ const UserDetail = () => {
           📜 Role History
         </Typography>
         
-        {roleHistory.length === 0 ? (
+                {roleHistory.length === 0 ? (
           <Box textAlign="center" py={6}>
             <Typography 
               sx={{ 
@@ -403,93 +409,64 @@ const UserDetail = () => {
             </Typography>
           </Box>
         ) : (
-          <TableContainer 
-            sx={{
-              background: alpha('#ffffff', 0.03),
-              borderRadius: 2,
-              border: `1px solid ${alpha('#ffffff', 0.1)}`,
-              overflow: 'hidden'
-            }}
-          >
-            <Table>
-              <TableHead>
-                <TableRow
-                  sx={{
-                    background: alpha('#ffffff', 0.05),
-                    '& .MuiTableCell-head': {
-                      color: alpha('#ffffff', 0.9),
-                      fontWeight: 600,
-                      borderBottom: `1px solid ${alpha('#ffffff', 0.2)}`,
-                      fontSize: '1rem'
-                    }
-                  }}
-                >
-                  <TableCell>Action</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Timestamp</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {roleHistory.map((change, index) => (
-                  <TableRow 
-                    key={index} 
+          <Box>
+            {roleHistory.map((change, index) => (
+              <Box
+                key={index}
+                sx={{
+                  py: 2,
+                  px: 2,
+                  mb: 1,
+                  borderRadius: 2,
+                  background: alpha('#ffffff', 0.05),
+                  border: `1px solid ${alpha('#ffffff', 0.1)}`,
+                  transition: 'all 0.2s ease',
+                  overflow: 'hidden',
+                  '&:hover': {
+                    background: alpha('#ffffff', 0.1),
+                    border: `1px solid ${alpha('#ffffff', 0.2)}`,
+                  }
+                }}
+              >
+                {/* Role Change Display like Dashboard: +/- Role Timestamp */}
+                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                  <Typography
                     sx={{
-                      '&:hover': {
-                        background: alpha('#ffffff', 0.05)
-                      },
-                      '& .MuiTableCell-body': {
-                        color: alpha('#ffffff', 0.8),
-                        borderBottom: `1px solid ${alpha('#ffffff', 0.1)}`,
-                        py: 2
-                      }
+                      fontSize: '1.2rem',
+                      fontWeight: 'bold',
+                      color: change.action === 'added' ? '#4caf50' : '#f44336'
                     }}
                   >
-                    <TableCell>
-                      <Chip
-                        label={`${getActionIcon(change.action)} ${change.action}`}
-                        color={getActionColor(change.action)}
-                        size="small"
-                        sx={{
-                          fontWeight: 600,
-                          minWidth: '100px'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Typography 
-                          variant="body2"
-                          sx={{ 
-                            color: alpha('#ffffff', 0.9),
-                            fontWeight: 500
-                          }}
-                        >
-                          {change.role_name || `Role ${change.role_id}`}
-                        </Typography>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ color: alpha('#ffffff', 0.5) }}
-                        >
-                          (ID: {change.role_id})
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography 
-                        variant="body2"
-                        sx={{ 
-                          color: alpha('#ffffff', 0.7),
-                          fontFamily: 'monospace'
-                        }}
-                      >
-                        {formatTimestamp(change.timestamp)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                    {change.action === 'added' ? '+' : '−'}
+                  </Typography>
+                  <Chip
+                    label={change.role_name || `Role ${change.role_id}`}
+                    size="small"
+                    sx={{
+                      backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
+                      color: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5'),
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                      '& .MuiChip-label': {
+                        textShadow: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5') === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.7)' : 'none'
+                      }
+                    }}
+                  />
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: alpha('#ffffff', 0.6),
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                      ml: 'auto' // Push timestamp to the right
+                    }}
+                  >
+                    {formatTimestamp(change.timestamp)}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
         )}
       </ModernCard>
     </ModernPageLayout>

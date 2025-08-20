@@ -483,7 +483,7 @@ class Database:
         """Get role change history for a user (excluding initial role assignments)"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute("""
-                SELECT rc.role_id, r.name as role_name, rc.action, rc.changed_at
+                SELECT rc.role_id, r.name as role_name, r.color, rc.action, rc.changed_at
                 FROM role_changes rc
                 INNER JOIN roles r ON rc.role_id = r.role_id
                 WHERE rc.user_id = ? AND rc.guild_id = ? AND rc.action != 'initial'
@@ -497,8 +497,9 @@ class Database:
                 history.append({
                     'role_id': row[0],
                     'role_name': row[1],
-                    'action': row[2],
-                    'timestamp': datetime.fromisoformat(row[3])
+                    'role_color': row[2],
+                    'action': row[3],
+                    'timestamp': datetime.fromisoformat(row[4])
                 })
             
             return history

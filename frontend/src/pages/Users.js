@@ -295,7 +295,7 @@ const Users = () => {
                           height: '28px',
                           px: 1,
                           backgroundColor: role.color || '#99aab5',
-                          color: role.color === '#99aab5' ? '#2c2f33' : '#ffffff',
+                          color: getContrastTextColor(role.color || '#99aab5'),
                           fontWeight: 'bold',
                           borderRadius: 2,
                           boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
@@ -305,7 +305,7 @@ const Users = () => {
                             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                           },
                           '& .MuiChip-label': {
-                            textShadow: role.color === '#99aab5' ? 'none' : '0 1px 2px rgba(0,0,0,0.5)',
+                            textShadow: getContrastTextColor(role.color || '#99aab5') === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
                             px: 1
                           },
                         }}
@@ -371,6 +371,25 @@ const Users = () => {
 
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+
+  // Helper function to get better text color based on background
+  const getContrastTextColor = (hexColor) => {
+    if (!hexColor) return isDark ? '#ffffff' : '#000000';
+    
+    // Remove # if present
+    const color = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(color.substr(0, 2), 16);
+    const g = parseInt(color.substr(2, 2), 16);
+    const b = parseInt(color.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark colors, dark for light colors
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
 
   if (loading) {
     return (

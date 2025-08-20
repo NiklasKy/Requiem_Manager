@@ -71,6 +71,7 @@ class ChangeEvent(BaseModel):
 class RoleChange(BaseModel):
     role_id: int
     role_name: Optional[str]
+    role_color: Optional[int]  # Discord role colors are integers
     action: str
     timestamp: datetime
 
@@ -256,6 +257,7 @@ async def get_role_history(user_id: str, guild_id: int = Query(...)):
             RoleChange(
                 role_id=change['role_id'],
                 role_name=change['role_name'],
+                role_color=change['role_color'],
                 action=change['action'],
                 timestamp=change['timestamp']
             )

@@ -34,6 +34,7 @@ const RecentChanges = () => {
   const [error, setError] = useState(null);
   const [limit, setLimit] = useState(50);
   const [filterType, setFilterType] = useState('all');
+  const [userFilter, setUserFilter] = useState('');
   const navigate = useNavigate();
 
   // Default guild ID
@@ -93,12 +94,81 @@ const RecentChanges = () => {
     }
   };
 
-  const filteredChanges = changes.filter(change => 
-    filterType === 'all' || change.type === filterType
-  );
+  const filteredChanges = changes.filter(change => {
+    // Filter by type
+    const typeMatch = filterType === 'all' || change.type === filterType;
+    
+    // Filter by user (search in username, display_name, or user_id)
+    const userMatch = userFilter === '' || 
+      (change.username && change.username.toLowerCase().includes(userFilter.toLowerCase())) ||
+      (change.display_name && change.display_name.toLowerCase().includes(userFilter.toLowerCase())) ||
+      (change.user_id && change.user_id.toString().includes(userFilter));
+    
+    return typeMatch && userMatch;
+  });
 
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+
+  // Helper function to get better text color based on background
+  const getContrastTextColor = (hexColor) => {
+    if (!hexColor) return isDark ? '#ffffff' : '#000000';
+    
+    // Remove # if present
+    const color = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(color.substr(0, 2), 16);
+    const g = parseInt(color.substr(2, 2), 16);
+    const b = parseInt(color.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return white for dark colors, dark for light colors
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
+
+  // Get custom styling for change type chips to ensure visibility in dark mode
+  const getChangeTypeChipStyle = (type) => {
+    const baseStyle = {
+      fontWeight: 600,
+      minWidth: '100px',
+      color: '#ffffff',
+      textShadow: '0 1px 2px rgba(0,0,0,0.7)'
+    };
+
+    switch (type) {
+      case 'username':
+        return {
+          ...baseStyle,
+          backgroundColor: '#5865f2', // Discord Blurple
+          '&:hover': { backgroundColor: '#4752c4' }
+        };
+      case 'nickname':
+        return {
+          ...baseStyle,
+          backgroundColor: '#43b581', // Discord Green
+          '&:hover': { backgroundColor: '#3ca374' }
+        };
+      case 'role':
+        return {
+          ...baseStyle,
+          backgroundColor: '#faa61a', // Discord Orange
+          color: '#000000', // Black text for better contrast on orange
+          textShadow: 'none',
+          '&:hover': { backgroundColor: '#e8940f' }
+        };
+      default:
+        return {
+          ...baseStyle,
+          backgroundColor: '#99aab5',
+          color: '#2c2f33',
+          textShadow: 'none',
+          '&:hover': { backgroundColor: '#87909c' }
+        };
+    }
+  };
 
   if (loading) {
     return (
@@ -183,7 +253,7 @@ const RecentChanges = () => {
         </Typography>
         
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField
               select
               fullWidth
@@ -229,7 +299,7 @@ const RecentChanges = () => {
               <MenuItem value="role">🛡️ Role Changes</MenuItem>
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField
               select
               fullWidth
@@ -273,6 +343,48 @@ const RecentChanges = () => {
               <MenuItem value={50}>📋 50 Changes</MenuItem>
               <MenuItem value={100}>📊 100 Changes</MenuItem>
             </TextField>
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              label="🔍 Filter by User"
+              placeholder="Enter username, display name, or user ID..."
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  background: alpha('#ffffff', 0.05),
+                  backdropFilter: 'blur(10px)',
+                  border: `1px solid ${alpha('#ffffff', 0.2)}`,
+                  borderRadius: 2,
+                  '& fieldset': {
+                    border: 'none',
+                  },
+                  '&:hover': {
+                    background: alpha('#ffffff', 0.1),
+                    border: `1px solid ${alpha('#ffffff', 0.3)}`,
+                  },
+                  '&.Mui-focused': {
+                    background: alpha('#ffffff', 0.1),
+                    border: `1px solid ${alpha('#5865f2', 0.5)}`,
+                    boxShadow: `0 0 0 3px ${alpha('#5865f2', 0.1)}`,
+                  },
+                },
+                '& .MuiInputLabel-root': {
+                  color: alpha('#ffffff', 0.7),
+                  '&.Mui-focused': {
+                    color: '#5865f2',
+                  },
+                },
+                '& input': {
+                  color: alpha('#ffffff', 0.9),
+                  '&::placeholder': {
+                    color: alpha('#ffffff', 0.5),
+                    opacity: 1,
+                  },
+                },
+              }}
+            />
           </Grid>
         </Grid>
       </ModernCard>
@@ -331,8 +443,7 @@ const RecentChanges = () => {
               >
                 <TableCell>🏷️ Type</TableCell>
                 <TableCell>👤 User</TableCell>
-                <TableCell>📝 Old Value</TableCell>
-                <TableCell>✨ New Value</TableCell>
+                <TableCell>🔄 Change</TableCell>
                 <TableCell>⏰ Timestamp</TableCell>
               </TableRow>
             </TableHead>
@@ -377,12 +488,8 @@ const RecentChanges = () => {
                     <TableCell>
                       <Chip
                         label={change.type}
-                        color={getChangeTypeColor(change.type)}
                         size="small"
-                        sx={{
-                          fontWeight: 600,
-                          minWidth: '100px'
-                        }}
+                        sx={getChangeTypeChipStyle(change.type)}
                         icon={
                           <Box 
                             sx={{ 
@@ -453,140 +560,65 @@ const RecentChanges = () => {
                     </TableCell>
                     <TableCell>
                       {change.type === 'role' ? (
-                        // Special handling for role changes
-                        change.action === 'removed' ? (
-                          <Box
+                        // Role Changes with +/- display like Dashboard
+                        <Box display="flex" alignItems="center" gap={1} mb={1}>
+                          <Typography
                             sx={{
-                              maxWidth: 200,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              p: 1,
-                              borderRadius: 1,
-                              background: alpha('#f44336', 0.15),
-                              border: `1px solid ${alpha('#f44336', 0.4)}`
+                              fontSize: '1.2rem',
+                              fontWeight: 'bold',
+                              color: change.action === 'added' ? '#4caf50' : '#f44336'
                             }}
                           >
-                            <Chip
-                              label={change.role_name}
-                              size="small"
-                              sx={{
-                                backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
-                                color: 'white',
-                                fontWeight: 600,
-                                '& .MuiChip-deleteIcon': {
-                                  color: 'white'
-                                }
-                              }}
-                              deleteIcon={<Typography sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}>❌</Typography>}
-                              onDelete={() => {}} // Just for the icon
-                            />
-                          </Box>
-                        ) : (
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              color: alpha('#ffffff', 0.6),
-                              fontStyle: 'italic'
-                            }}
-                          >
-                            (none)
+                            {change.action === 'added' ? '+' : '−'}
                           </Typography>
-                        )
+                          <Chip
+                            label={change.role_name}
+                            size="small"
+                            sx={{
+                              backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
+                              color: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5'),
+                              fontWeight: 600,
+                              fontSize: '0.75rem',
+                              '& .MuiChip-label': {
+                                textShadow: getContrastTextColor(change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5') === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.7)' : 'none'
+                              }
+                            }}
+                          />
+                        </Box>
                       ) : (
-                        // Regular handling for username/nickname changes
-                        <Box
-                          sx={{
-                            maxWidth: 200,
+                        // Username/Nickname Changes like Dashboard: old → new
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            color: alpha('#ffffff', 0.8),
+                            fontWeight: 500,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            p: 1,
-                            borderRadius: 1,
-                            background: alpha('#f44336', 0.1),
-                            border: `1px solid ${alpha('#f44336', 0.3)}`
+                            whiteSpace: 'nowrap'
                           }}
                         >
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
+                          <Box
+                            component="span"
+                            sx={{
                               textDecoration: 'line-through',
-                              color: alpha('#ffffff', 0.7),
-                              fontStyle: change.old_value ? 'normal' : 'italic'
+                              color: alpha('#ffffff', 0.6),
+                              marginRight: 1
                             }}
                           >
                             {change.old_value || '(none)'}
-                          </Typography>
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {change.type === 'role' ? (
-                        // Special handling for role changes
-                        change.action === 'added' ? (
-                          <Box
-                            sx={{
-                              maxWidth: 200,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              p: 1,
-                              borderRadius: 1,
-                              background: alpha('#4caf50', 0.15),
-                              border: `1px solid ${alpha('#4caf50', 0.4)}`
-                            }}
-                          >
-                            <Chip
-                              label={change.role_name}
-                              size="small"
-                              sx={{
-                                backgroundColor: change.role_color ? `#${change.role_color.toString(16).padStart(6, '0')}` : '#99aab5',
-                                color: 'white',
-                                fontWeight: 600,
-                                '& .MuiChip-deleteIcon': {
-                                  color: 'white'
-                                }
-                              }}
-                              deleteIcon={<Typography sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}>✅</Typography>}
-                              onDelete={() => {}} // Just for the icon
-                            />
                           </Box>
-                        ) : (
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              color: alpha('#ffffff', 0.6),
-                              fontStyle: 'italic'
-                            }}
-                          >
-                            (none)
-                          </Typography>
-                        )
-                      ) : (
-                        // Regular handling for username/nickname changes
-                        <Box
-                          sx={{
-                            maxWidth: 200,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            p: 1,
-                            borderRadius: 1,
-                            background: alpha('#4caf50', 0.1),
-                            border: `1px solid ${alpha('#4caf50', 0.3)}`
-                          }}
-                        >
-                          <Typography 
-                            variant="body2"
-                            sx={{ 
+                          →
+                          <Box
+                            component="span"
+                            sx={{
                               fontWeight: 600,
                               color: alpha('#ffffff', 0.9),
-                              fontStyle: change.new_value ? 'normal' : 'italic'
+                              marginLeft: 1
                             }}
                           >
                             {change.new_value || '(none)'}
-                          </Typography>
-                        </Box>
+                          </Box>
+                        </Typography>
                       )}
                     </TableCell>
                     <TableCell>
