@@ -6,6 +6,8 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  Button,
+  Avatar,
   useTheme,
   alpha
 } from '@mui/material';
@@ -19,6 +21,7 @@ import {
   Dashboard as DashboardIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
   LineChart,
   Line,
@@ -41,6 +44,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Default guild ID - in a real app, this would come from user selection or environment
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
@@ -77,6 +81,12 @@ const Dashboard = () => {
     // Ensure userId is treated as string to prevent precision loss
     const userIdStr = String(userId);
     navigate(`/users/${userIdStr}?guild=${defaultGuildId}`);
+  };
+
+  const handleViewOwnProfile = () => {
+    if (user?.user_id) {
+      navigate(`/users/${user.user_id}?guild=${defaultGuildId}`);
+    }
   };
 
   const getChangeTypeColor = (type) => {
@@ -189,6 +199,67 @@ const Dashboard = () => {
           Real-time Analytics & User Tracking
         </Typography>
       </Box>
+
+      {/* Welcome Card */}
+      {user && (
+        <ModernCard sx={{ mb: 4 }}>
+          <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
+            <Box display="flex" alignItems="center" gap={2}>
+              <Avatar 
+                src={user.avatar_url} 
+                sx={{ 
+                  width: 56, 
+                  height: 56,
+                  border: `3px solid ${alpha('#5865f2', 0.3)}`,
+                  boxShadow: '0 4px 12px rgba(88, 101, 242, 0.2)'
+                }}
+              >
+                {user.username?.charAt(0)?.toUpperCase()}
+              </Avatar>
+              <Box>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    color: alpha('#ffffff', 0.95),
+                    fontWeight: 700,
+                    mb: 0.5
+                  }}
+                >
+                  Welcome back, {user.username}! 👋
+                </Typography>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    color: alpha('#ffffff', 0.7)
+                  }}
+                >
+                  Ready to track some user activity? Check out your profile or browse the latest changes.
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              onClick={handleViewOwnProfile}
+              sx={{
+                background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                color: 'white',
+                fontWeight: 600,
+                px: 3,
+                py: 1.5,
+                borderRadius: 2,
+                boxShadow: '0 4px 12px rgba(88, 101, 242, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #4752c4 0%, #5b6bb0 100%)',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 6px 16px rgba(88, 101, 242, 0.4)',
+                }
+              }}
+            >
+              View My Profile
+            </Button>
+          </Box>
+        </ModernCard>
+      )}
 
       {/* Statistics Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>

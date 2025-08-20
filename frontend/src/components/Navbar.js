@@ -16,14 +16,15 @@ import {
   Chip
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import HistoryIcon from '@mui/icons-material/History';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import ThemeToggle from './ThemeToggle';
-import { useAuth } from '../contexts/AuthContext';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -46,6 +47,12 @@ const Navbar = () => {
 
   const handleProfileMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleViewProfile = () => {
+    const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
+    navigate(`/users/${user.user_id}?guild=${defaultGuildId}`);
+    handleProfileMenuClose();
   };
 
   const handleLogout = () => {
@@ -326,6 +333,25 @@ const Navbar = () => {
                   />
                 </MenuItem>
                 <Divider sx={{ my: 1, opacity: 0.3 }} />
+                <MenuItem 
+                  onClick={handleViewProfile}
+                  sx={{
+                    '&:hover': {
+                      background: alpha('#5865f2', 0.1),
+                    }
+                  }}
+                >
+                  <ListItemIcon>
+                    <AccountCircleIcon sx={{ color: '#5865f2' }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={
+                      <Typography variant="body2" fontWeight={600}>
+                        View Profile
+                      </Typography>
+                    } 
+                  />
+                </MenuItem>
                 <MenuItem 
                   onClick={handleLogout}
                   sx={{
