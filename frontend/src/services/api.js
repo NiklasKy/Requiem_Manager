@@ -97,6 +97,12 @@ export const apiService = {
     return response.data;
   },
 
+  // Weekly activity
+  async getWeeklyActivity(guildId) {
+    const response = await api.get(`/api/servers/${guildId}/weekly-activity`);
+    return response.data;
+  },
+
   // Database stats (admin)
   async getDatabaseStats() {
     const response = await api.get('/api/admin/database-stats');

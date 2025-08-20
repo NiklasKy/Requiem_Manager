@@ -41,6 +41,7 @@ import { apiService } from '../services/api';
 const Dashboard = () => {
   const [serverStats, setServerStats] = useState(null);
   const [recentChanges, setRecentChanges] = useState([]);
+  const [weeklyActivity, setWeeklyActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -58,13 +59,15 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
 
-      const [statsData, changesData] = await Promise.all([
+      const [statsData, changesData, weeklyData] = await Promise.all([
         apiService.getServerStats(defaultGuildId),
-        apiService.getRecentChanges(defaultGuildId, 10)
+        apiService.getRecentChanges(defaultGuildId, 10),
+        apiService.getWeeklyActivity(defaultGuildId)
       ]);
 
       setServerStats(statsData);
       setRecentChanges(changesData);
+      setWeeklyActivity(weeklyData);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError('Failed to load dashboard data. Please check if the API is running.');
@@ -212,15 +215,15 @@ const Dashboard = () => {
     );
   }
 
-  // Sample chart data for demonstration
-  const chartData = [
-    { name: 'Mon', changes: 12 },
-    { name: 'Tue', changes: 19 },
-    { name: 'Wed', changes: 8 },
-    { name: 'Thu', changes: 15 },
-    { name: 'Fri', changes: 22 },
-    { name: 'Sat', changes: 18 },
-    { name: 'Sun', changes: 14 },
+  // Use real weekly activity data, fallback to empty if loading
+  const chartData = weeklyActivity.length > 0 ? weeklyActivity : [
+    { name: 'Sun', changes: 0 },
+    { name: 'Mon', changes: 0 },
+    { name: 'Tue', changes: 0 },
+    { name: 'Wed', changes: 0 },
+    { name: 'Thu', changes: 0 },
+    { name: 'Fri', changes: 0 },
+    { name: 'Sat', changes: 0 },
   ];
 
   return (

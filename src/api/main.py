@@ -80,7 +80,10 @@ class DatabaseStats(BaseModel):
     username_changes: int
     nickname_changes: int
     role_changes: int
-    join_leave_events: int
+
+class WeeklyActivityDay(BaseModel):
+    name: str
+    changes: int
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -266,6 +269,24 @@ async def get_role_history(user_id: str, guild_id: int = Query(...)):
         
     except Exception as e:
         logger.error(f"Error getting role history: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/servers/{guild_id}/weekly-activity", response_model=List[WeeklyActivityDay])
+async def get_weekly_activity(guild_id: int):
+    """Get weekly activity statistics for a server"""
+    try:
+        activity_data = await db.get_weekly_activity(guild_id)
+        
+        return [
+            WeeklyActivityDay(
+                name=day['name'],
+                changes=day['changes']
+            )
+            for day in activity_data
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error getting weekly activity: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/admin/database-stats", response_model=DatabaseStats)

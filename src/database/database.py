@@ -504,6 +504,94 @@ class Database:
             
             return history
     
+    async def get_weekly_activity(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get activity statistics for the last 7 days"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get the start of the week (7 days ago)
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            
+            cursor = await db.execute("""
+                WITH weekly_changes AS (
+                    -- Username changes
+                    SELECT 
+                        CASE CAST(STRFTIME('%w', uc.changed_at) AS INTEGER)
+                            WHEN 0 THEN 'Sun'
+                            WHEN 1 THEN 'Mon' 
+                            WHEN 2 THEN 'Tue'
+                            WHEN 3 THEN 'Wed'
+                            WHEN 4 THEN 'Thu'
+                            WHEN 5 THEN 'Fri'
+                            WHEN 6 THEN 'Sat'
+                        END as day_name,
+                        CAST(STRFTIME('%w', uc.changed_at) AS INTEGER) as day_number,
+                        COUNT(*) as change_count
+                    FROM username_changes uc
+                    JOIN guild_members gm ON uc.user_id = gm.user_id
+                    WHERE gm.guild_id = ? AND uc.changed_at >= ?
+                    GROUP BY STRFTIME('%w', uc.changed_at)
+                    
+                    UNION ALL
+                    
+                    -- Nickname changes  
+                    SELECT 
+                        CASE CAST(STRFTIME('%w', nc.changed_at) AS INTEGER)
+                            WHEN 0 THEN 'Sun'
+                            WHEN 1 THEN 'Mon'
+                            WHEN 2 THEN 'Tue' 
+                            WHEN 3 THEN 'Wed'
+                            WHEN 4 THEN 'Thu'
+                            WHEN 5 THEN 'Fri'
+                            WHEN 6 THEN 'Sat'
+                        END as day_name,
+                        CAST(STRFTIME('%w', nc.changed_at) AS INTEGER) as day_number,
+                        COUNT(*) as change_count
+                    FROM nickname_changes nc
+                    WHERE nc.guild_id = ? AND nc.changed_at >= ?
+                    GROUP BY STRFTIME('%w', nc.changed_at)
+                    
+                    UNION ALL
+                    
+                    -- Role changes (excluding initial)
+                    SELECT 
+                        CASE CAST(STRFTIME('%w', rc.changed_at) AS INTEGER)
+                            WHEN 0 THEN 'Sun'
+                            WHEN 1 THEN 'Mon'
+                            WHEN 2 THEN 'Tue'
+                            WHEN 3 THEN 'Wed' 
+                            WHEN 4 THEN 'Thu'
+                            WHEN 5 THEN 'Fri'
+                            WHEN 6 THEN 'Sat'
+                        END as day_name,
+                        CAST(STRFTIME('%w', rc.changed_at) AS INTEGER) as day_number,
+                        COUNT(*) as change_count
+                    FROM role_changes rc
+                    WHERE rc.guild_id = ? AND rc.changed_at >= ? AND rc.action != 'initial'
+                    GROUP BY STRFTIME('%w', rc.changed_at)
+                )
+                SELECT day_name, SUM(change_count) as total_changes
+                FROM weekly_changes
+                GROUP BY day_name, day_number
+                ORDER BY day_number
+            """, (guild_id, week_ago, guild_id, week_ago, guild_id, week_ago))
+            
+            rows = await cursor.fetchall()
+            
+            # Create a complete week structure with all days
+            days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            activity_data = []
+            
+            # Convert rows to dict for easy lookup
+            data_dict = {row[0]: row[1] for row in rows}
+            
+            # Ensure all days are present, even with 0 changes
+            for day in days_order:
+                activity_data.append({
+                    'name': day,
+                    'changes': data_dict.get(day, 0)
+                })
+            
+            return activity_data
+    
     async def get_database_stats(self) -> Dict[str, int]:
         """Get overall database statistics (excluding initial role assignments)"""
         async with aiosqlite.connect(self.db_path) as db:
