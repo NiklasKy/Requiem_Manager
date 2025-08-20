@@ -403,7 +403,7 @@ async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(
             if guild_id:
                 # Search by username, display name, nickname, or role name in specific guild
                 cursor = await conn.execute("""
-                    SELECT DISTINCT u.user_id, u.username, u.display_name, u.avatar_url, u.last_seen, gm.nickname
+                    SELECT DISTINCT u.user_id, u.username, u.display_name, u.avatar_url, u.last_seen, gm.nickname, gm.joined_at
                     FROM users u
                     JOIN guild_members gm ON u.user_id = gm.user_id
                     LEFT JOIN role_changes rc ON u.user_id = rc.user_id AND rc.guild_id = gm.guild_id
@@ -420,7 +420,7 @@ async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(
             else:
                 # Search by username or display name only (global search)
                 cursor = await conn.execute("""
-                    SELECT user_id, username, display_name, avatar_url, last_seen, NULL as nickname
+                    SELECT user_id, username, display_name, avatar_url, last_seen, NULL as nickname, NULL as joined_at
                     FROM users 
                     WHERE username LIKE ? OR display_name LIKE ?
                     ORDER BY last_seen DESC
@@ -436,7 +436,8 @@ async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(
                     "display_name": user[2],
                     "avatar_url": user[3],
                     "last_seen": user[4],
-                    "nickname": user[5]
+                    "nickname": user[5],
+                    "joined_at": user[6]
                 }
                 for user in users
             ]

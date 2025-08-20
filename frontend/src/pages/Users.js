@@ -41,8 +41,8 @@ const Users = () => {
   // Default guild ID - in a real app, this would come from user selection
   const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '123456789012345678';
 
-  // Debounce search query to avoid API spam (500ms delay)
-  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  // Debounce search query to avoid API spam (150ms delay - perfect balance)
+  const debouncedSearchQuery = useDebounce(searchQuery, 150);
 
   const loadUsers = useCallback(async () => {
     try {
