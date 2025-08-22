@@ -65,6 +65,9 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - GUEST_USER_IDS=${GUEST_USER_IDS}
+      - FILTER_ROLES=${FILTER_ROLES}
+      - DEFAULT_FILTER_ROLE=${DEFAULT_FILTER_ROLE}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
