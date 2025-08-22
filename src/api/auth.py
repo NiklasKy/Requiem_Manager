@@ -61,8 +61,6 @@ class DiscordCallbackData(BaseModel):
 
 async def exchange_discord_code(code: str) -> dict:
     """Exchange Discord OAuth2 code for access token"""
-    print(f"DEBUG: Discord Client ID configured: {bool(DISCORD_CLIENT_ID)}")
-    print(f"DEBUG: Discord Client Secret configured: {bool(DISCORD_CLIENT_SECRET)}")
     
     # Prevent code reuse with lock
     async with code_lock:

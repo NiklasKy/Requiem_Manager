@@ -697,33 +697,18 @@ async def fix_missing_users():
 @app.post("/api/auth/discord/callback")
 async def discord_auth_callback(data: DiscordCallbackData):
     """Handle Discord OAuth2 callback"""
-    print(f"DEBUG: Auth callback called with data: {data}")
-    print(f"DEBUG: AUTH_AVAILABLE = {AUTH_AVAILABLE}")
-    
     if not AUTH_AVAILABLE:
         raise HTTPException(status_code=503, detail="Authentication not configured")
     
     try:
         # Exchange code for user data
-        print(f"DEBUG: About to exchange Discord code: {data.code}")
         discord_data = await exchange_discord_code(data.code)
-        print(f"DEBUG: Discord data received: {discord_data}")
         user_data = discord_data['user']
-        print(f"DEBUG: User data extracted: {user_data}")
-        print(f"DEBUG: Checking environment variables...")
-        print(f"DEBUG: ADMIN_USER_IDS from env: {ADMIN_USER_IDS}")
-        print(f"DEBUG: GUEST_USER_IDS from env: {GUEST_USER_IDS}")
         
         # Check if user is Admin or Guest (bypass server membership requirement)
         user_id = user_data['id']
         is_admin_user = user_id in ADMIN_USER_IDS
         is_guest_user = user_id in GUEST_USER_IDS
-        
-        print(f"DEBUG: User ID: {user_id}")
-        print(f"DEBUG: ADMIN_USER_IDS: {ADMIN_USER_IDS}")
-        print(f"DEBUG: GUEST_USER_IDS: {GUEST_USER_IDS}")
-        print(f"DEBUG: is_admin_user: {is_admin_user}")
-        print(f"DEBUG: is_guest_user: {is_guest_user}")
         
         # Get user roles from our database if they're in the guild
         roles = []
@@ -740,13 +725,10 @@ async def discord_auth_callback(data: DiscordCallbackData):
                 logger.warning(f"Could not get guild member info: {e}")
                 # For regular users, fail if not in guild
                 if not (is_admin_user or is_guest_user):
-                    print(f"DEBUG: Regular user {user_id} not in guild and not admin/guest - denying access")
                     raise HTTPException(
                         status_code=403, 
                         detail="User not found in required Discord server"
                     )
-                else:
-                    print(f"DEBUG: Admin/Guest user {user_id} allowed despite not being in guild")
         elif REQUIRED_GUILD_ID and (is_admin_user or is_guest_user):
             # Admin/Guest users: try to get roles but don't fail if not in guild
             try:
