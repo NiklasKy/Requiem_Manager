@@ -21,7 +21,8 @@ try:
         AuthUser,
         REQUIRED_GUILD_ID,
         ADMIN_ROLE_IDS,
-        ADMIN_USER_IDS
+        ADMIN_USER_IDS,
+        GUEST_USER_IDS
     )
     AUTH_AVAILABLE = True
 except ImportError as e:
@@ -710,9 +711,15 @@ async def discord_auth_callback(data: DiscordCallbackData):
         user_data = discord_data['user']
         print(f"DEBUG: User data extracted: {user_data}")
         
+        # Check if user is Admin or Guest (bypass server membership requirement)
+        user_id = user_data['id']
+        is_admin_user = user_id in ADMIN_USER_IDS
+        is_guest_user = user_id in GUEST_USER_IDS
+        
         # Get user roles from our database if they're in the guild
         roles = []
-        if REQUIRED_GUILD_ID:
+        if REQUIRED_GUILD_ID and not (is_admin_user or is_guest_user):
+            # Regular users need to be in the guild
             try:
                 member_info = await get_user_guild_member_info(
                     discord_data['access_token'], 
@@ -722,6 +729,24 @@ async def discord_auth_callback(data: DiscordCallbackData):
                 roles = member_info.get('roles', [])
             except Exception as e:
                 logger.warning(f"Could not get guild member info: {e}")
+                # For regular users, fail if not in guild
+                if not (is_admin_user or is_guest_user):
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="User not found in required Discord server"
+                    )
+        elif REQUIRED_GUILD_ID and (is_admin_user or is_guest_user):
+            # Admin/Guest users: try to get roles but don't fail if not in guild
+            try:
+                member_info = await get_user_guild_member_info(
+                    discord_data['access_token'], 
+                    REQUIRED_GUILD_ID, 
+                    user_data['id']
+                )
+                roles = member_info.get('roles', [])
+            except Exception as e:
+                logger.info(f"Admin/Guest user {user_id} not in guild, but allowed access: {e}")
+                roles = []
         
         # Create JWT token
         token = create_jwt_token(user_data, roles)
@@ -735,10 +760,9 @@ async def discord_auth_callback(data: DiscordCallbackData):
                 "discriminator": user_data['discriminator'],
                 "avatar_url": f"https://cdn.discordapp.com/avatars/{user_data['id']}/{user_data['avatar']}.png" if user_data['avatar'] else None,
                 "roles": roles,
-                "is_admin": (
-                    any(role.get('role_id', '') in ADMIN_ROLE_IDS for role in roles) or
-                    user_data['id'] in ADMIN_USER_IDS
-                )
+                "is_admin": is_admin_user or any(role.get('role_id', '') in ADMIN_ROLE_IDS for role in roles),
+                "is_guest": is_guest_user,
+                "has_website_access": True  # If we reach this point, user has access
             }
         }
         

@@ -40,6 +40,9 @@ REQUIRED_GUILD_ID = os.getenv('DISCORD_GUILD_ID')
 ADMIN_ROLE_IDS = [role_id.strip() for role_id in os.getenv('ADMIN_ROLE_IDS', '').split(',') if role_id.strip()]
 ADMIN_USER_IDS = [user_id.strip() for user_id in os.getenv('ADMIN_USER_IDS', '').split(',') if user_id.strip()]
 
+# Guest configuration
+GUEST_USER_IDS = [user_id.strip() for user_id in os.getenv('GUEST_USER_IDS', '').split(',') if user_id.strip()]
+
 security = HTTPBearer()
 
 class AuthUser(BaseModel):
@@ -49,6 +52,8 @@ class AuthUser(BaseModel):
     avatar_url: Optional[str]
     roles: List[Dict]
     is_admin: bool
+    is_guest: bool
+    has_website_access: bool
 
 class DiscordCallbackData(BaseModel):
     code: str
@@ -197,16 +202,41 @@ async def get_user_guild_member_info(access_token: str, guild_id: str, user_id: 
 
 def create_jwt_token(user_data: dict, roles: List[Dict] = None) -> str:
     """Create JWT token for authenticated user"""
+    user_id = user_data['id']
+    
+    # Check if user is admin
+    is_admin = (
+        any(role.get('role_id', '') in ADMIN_ROLE_IDS for role in (roles or [])) or
+        user_id in ADMIN_USER_IDS
+    )
+    
+    # Check if user is guest
+    is_guest = user_id in GUEST_USER_IDS
+    
+    # Calculate website access
+    # Admin and Guest users always have access
+    # Regular users need to have allowed roles
+    has_website_access = False
+    if is_admin or is_guest:
+        has_website_access = True
+    else:
+        # Check if user has any of the allowed roles
+        allowed_role_ids = [role_id.strip() for role_id in os.getenv('ALLOWED_ROLE_IDS', '').split(',') if role_id.strip()]
+        if allowed_role_ids:
+            has_website_access = any(role.get('role_id', '') in allowed_role_ids for role in (roles or []))
+        else:
+            # If no allowed roles configured, allow all users with roles
+            has_website_access = bool(roles)
+    
     payload = {
-        'user_id': user_data['id'],
+        'user_id': user_id,
         'username': user_data['username'],
         'discriminator': user_data['discriminator'],
         'avatar_url': f"https://cdn.discordapp.com/avatars/{user_data['id']}/{user_data['avatar']}.png" if user_data['avatar'] else None,
         'roles': roles or [],
-        'is_admin': (
-            any(role.get('role_id', '') in ADMIN_ROLE_IDS for role in (roles or [])) or
-            user_data['id'] in ADMIN_USER_IDS
-        ),
+        'is_admin': is_admin,
+        'is_guest': is_guest,
+        'has_website_access': has_website_access,
         'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
         'iat': datetime.utcnow()
     }
@@ -239,7 +269,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         discriminator=payload['discriminator'],
         avatar_url=payload.get('avatar_url'),
         roles=payload.get('roles', []),
-        is_admin=payload.get('is_admin', False)
+        is_admin=payload.get('is_admin', False),
+        is_guest=payload.get('is_guest', False),
+        has_website_access=payload.get('has_website_access', False)
     )
 
 async def require_admin(current_user: AuthUser = Depends(get_current_user)) -> AuthUser:
