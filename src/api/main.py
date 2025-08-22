@@ -716,6 +716,12 @@ async def discord_auth_callback(data: DiscordCallbackData):
         is_admin_user = user_id in ADMIN_USER_IDS
         is_guest_user = user_id in GUEST_USER_IDS
         
+        print(f"DEBUG: User ID: {user_id}")
+        print(f"DEBUG: ADMIN_USER_IDS: {ADMIN_USER_IDS}")
+        print(f"DEBUG: GUEST_USER_IDS: {GUEST_USER_IDS}")
+        print(f"DEBUG: is_admin_user: {is_admin_user}")
+        print(f"DEBUG: is_guest_user: {is_guest_user}")
+        
         # Get user roles from our database if they're in the guild
         roles = []
         if REQUIRED_GUILD_ID and not (is_admin_user or is_guest_user):
