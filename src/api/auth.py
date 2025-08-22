@@ -132,10 +132,14 @@ async def exchange_discord_code(code: str) -> dict:
         
         guilds_data = guilds_response.json()
         
-        # Check if user is in required guild
+        # Check if user is in required guild (but allow admin/guest users to bypass this)
         if REQUIRED_GUILD_ID:
             user_in_guild = any(guild['id'] == REQUIRED_GUILD_ID for guild in guilds_data)
-            if not user_in_guild:
+            user_id = user_data['id']
+            is_admin_user = user_id in ADMIN_USER_IDS
+            is_guest_user = user_id in GUEST_USER_IDS
+            
+            if not user_in_guild and not (is_admin_user or is_guest_user):
                 raise HTTPException(
                     status_code=403,
                     detail="You must be a member of the required Discord server"
