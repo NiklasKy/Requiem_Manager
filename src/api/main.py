@@ -710,6 +710,9 @@ async def discord_auth_callback(data: DiscordCallbackData):
         print(f"DEBUG: Discord data received: {discord_data}")
         user_data = discord_data['user']
         print(f"DEBUG: User data extracted: {user_data}")
+        print(f"DEBUG: Checking environment variables...")
+        print(f"DEBUG: ADMIN_USER_IDS from env: {ADMIN_USER_IDS}")
+        print(f"DEBUG: GUEST_USER_IDS from env: {GUEST_USER_IDS}")
         
         # Check if user is Admin or Guest (bypass server membership requirement)
         user_id = user_data['id']
@@ -737,10 +740,13 @@ async def discord_auth_callback(data: DiscordCallbackData):
                 logger.warning(f"Could not get guild member info: {e}")
                 # For regular users, fail if not in guild
                 if not (is_admin_user or is_guest_user):
+                    print(f"DEBUG: Regular user {user_id} not in guild and not admin/guest - denying access")
                     raise HTTPException(
                         status_code=403, 
                         detail="User not found in required Discord server"
                     )
+                else:
+                    print(f"DEBUG: Admin/Guest user {user_id} allowed despite not being in guild")
         elif REQUIRED_GUILD_ID and (is_admin_user or is_guest_user):
             # Admin/Guest users: try to get roles but don't fail if not in guild
             try:
