@@ -53,6 +53,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - FILTER_ROLES=${FILTER_ROLES}
+      - DEFAULT_FILTER_ROLE=${DEFAULT_FILTER_ROLE}
     networks:
       - requiem-dev-network
     command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

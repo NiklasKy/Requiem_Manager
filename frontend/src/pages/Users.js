@@ -36,6 +36,9 @@ const Users = () => {
   const [error, setError] = useState(null);
   const [bulkRoles, setBulkRoles] = useState({});
   const [loadingRoles, setLoadingRoles] = useState(false);
+  const [roleFilters, setRoleFilters] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState(null); // Will be set from API
+  const [loadingFilters, setLoadingFilters] = useState(false);
   const navigate = useNavigate();
 
   // Default guild ID - in a real app, this would come from user selection
@@ -44,11 +47,46 @@ const Users = () => {
   // Debounce search query to avoid API spam (150ms delay - perfect balance)
   const debouncedSearchQuery = useDebounce(searchQuery, 150);
 
+  const loadRoleFilters = useCallback(async () => {
+    try {
+      setLoadingFilters(true);
+      const data = await apiService.getRoleFilters(defaultGuildId);
+      
+      // Handle both old and new API response format
+      if (data.filters) {
+        setRoleFilters(data.filters);
+        setSelectedFilter(data.default_filter || 'all');
+      } else {
+        // Fallback for old API format
+        setRoleFilters(data);
+        setSelectedFilter('all');
+      }
+    } catch (err) {
+      console.error('Error loading role filters:', err);
+      // Set default filter if API fails
+      setRoleFilters([{
+        role_id: 'all',
+        role_name: 'All Users',
+        role_color: '#5865f2'
+      }]);
+      setSelectedFilter('all');
+    } finally {
+      setLoadingFilters(false);
+    }
+  }, [defaultGuildId]);
+
   const loadUsers = useCallback(async () => {
+    // Don't load users if no filter is selected yet
+    if (selectedFilter === null) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
-      const data = await apiService.getGuildUsers(defaultGuildId);
+      const filterToUse = selectedFilter === 'all' ? null : selectedFilter;
+      const data = await apiService.getGuildUsers(defaultGuildId, true, filterToUse);
       setUsers(data);
       
       // Load roles for all users in bulk
@@ -59,7 +97,7 @@ const Users = () => {
     } finally {
       setLoading(false);
     }
-  }, [defaultGuildId]);
+  }, [defaultGuildId, selectedFilter]);
 
   const loadBulkRoles = useCallback(async (usersData) => {
     try {
@@ -88,16 +126,26 @@ const Users = () => {
   }, [defaultGuildId]);
 
   const searchUsers = useCallback(async () => {
+    // Don't search if no filter is selected yet
+    if (selectedFilter === null) {
+      return;
+    }
+    
     try {
       setSearching(true);
-      const data = await apiService.searchUsers(debouncedSearchQuery, defaultGuildId);
+      const filterToUse = selectedFilter === 'all' ? null : selectedFilter;
+      const data = await apiService.searchUsers(debouncedSearchQuery, defaultGuildId, filterToUse);
       setSearchResults(data);
     } catch (err) {
       console.error('Error searching users:', err);
     } finally {
       setSearching(false);
     }
-  }, [debouncedSearchQuery, defaultGuildId]);
+  }, [debouncedSearchQuery, defaultGuildId, selectedFilter]);
+
+  useEffect(() => {
+    loadRoleFilters();
+  }, [loadRoleFilters]);
 
   useEffect(() => {
     loadUsers();
@@ -115,6 +163,10 @@ const Users = () => {
     // Ensure userId is treated as string to prevent precision loss
     const userIdStr = String(userId);
     navigate(`/users/${userIdStr}?guild=${defaultGuildId}`);
+  };
+
+  const handleFilterChange = (filterId) => {
+    setSelectedFilter(filterId);
   };
 
   const formatDate = (dateString) => {
@@ -506,6 +558,81 @@ const Users = () => {
         />
       </ModernCard>
 
+      {/* Role Filters */}
+      <ModernCard sx={{ mb: 4 }}>
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            color: alpha('#ffffff', 0.9),
+            fontWeight: 600,
+            mb: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}
+        >
+          🎭 Filter by Role
+        </Typography>
+        
+        {loadingFilters ? (
+          <Box display="flex" gap={1} flexWrap="wrap">
+            {[1, 2, 3].map((i) => (
+              <Skeleton 
+                key={i} 
+                variant="rectangular" 
+                width={100} 
+                height={40} 
+                sx={{ 
+                  borderRadius: 2,
+                  bgcolor: alpha('#ffffff', 0.1)
+                }} 
+              />
+            ))}
+          </Box>
+        ) : (
+          <Box display="flex" gap={2} flexWrap="wrap">
+            {roleFilters.map((filter) => (
+              <Chip
+                key={filter.role_id}
+                label={filter.role_name}
+                onClick={() => handleFilterChange(filter.role_id)}
+                variant={selectedFilter === filter.role_id ? "filled" : "outlined"}
+                sx={{
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  height: '40px',
+                  px: 2,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  backgroundColor: selectedFilter === filter.role_id 
+                    ? filter.role_color 
+                    : alpha(filter.role_color, 0.1),
+                  color: selectedFilter === filter.role_id 
+                    ? getContrastTextColor(filter.role_color)
+                    : filter.role_color,
+                  border: `2px solid ${filter.role_color}`,
+                  borderRadius: 3,
+                  boxShadow: selectedFilter === filter.role_id 
+                    ? `0 4px 15px ${alpha(filter.role_color, 0.4)}` 
+                    : 'none',
+                  '&:hover': {
+                    backgroundColor: alpha(filter.role_color, selectedFilter === filter.role_id ? 0.9 : 0.2),
+                    transform: 'translateY(-2px)',
+                    boxShadow: `0 6px 20px ${alpha(filter.role_color, 0.3)}`,
+                  },
+                  '& .MuiChip-label': {
+                    textShadow: selectedFilter === filter.role_id && getContrastTextColor(filter.role_color) === '#ffffff' 
+                      ? '0 1px 2px rgba(0,0,0,0.5)' 
+                      : 'none',
+                    px: 1
+                  }
+                }}
+              />
+            ))}
+          </Box>
+        )}
+      </ModernCard>
+
       {error && (
         <Alert 
           severity="error" 
@@ -578,41 +705,85 @@ const Users = () => {
       {/* All Users */}
       {searchQuery.length < 2 && (
         <Box>
-          <ModernCard sx={{ mb: 3 }}>
-            <Typography 
-              variant="h6" 
-              sx={{ 
-                color: alpha('#ffffff', 0.9),
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1
-              }}
-            >
-              👥 Guild Members 
-              <Chip 
-                label={users.length} 
-                size="small"
-                sx={{
-                  background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
-                  color: 'white',
-                  fontWeight: 600
-                }}
-              />
-            </Typography>
-          </ModernCard>
-          
-          <Grid container spacing={3}>
-            {users.map((user) => (
-              <Grid item xs={12} sm={6} md={4} key={user.user_id}>
-                <UserCardWithRoles user={user} showGuildInfo={true} />
+          {selectedFilter !== null && (
+            <>
+              <ModernCard sx={{ mb: 3 }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    color: alpha('#ffffff', 0.9),
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}
+                >
+                  👥 Guild Members 
+                  <Chip 
+                    label={users.length} 
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                      color: 'white',
+                      fontWeight: 600
+                    }}
+                  />
+                  {selectedFilter !== 'all' && (
+                    <Chip 
+                      label={`Filtered by: ${roleFilters.find(f => f.role_id === selectedFilter)?.role_name || 'Unknown Role'}`}
+                      size="small"
+                      sx={{
+                        backgroundColor: roleFilters.find(f => f.role_id === selectedFilter)?.role_color || '#99aab5',
+                        color: getContrastTextColor(roleFilters.find(f => f.role_id === selectedFilter)?.role_color || '#99aab5'),
+                        fontWeight: 600
+                      }}
+                    />
+                  )}
+                </Typography>
+              </ModernCard>
+              
+              <Grid container spacing={3}>
+                {users.map((user) => (
+                  <Grid item xs={12} sm={6} md={4} key={user.user_id}>
+                    <UserCardWithRoles user={user} showGuildInfo={true} />
+                  </Grid>
+                ))}
               </Grid>
-            ))}
-          </Grid>
+              
+              {users.length === 0 && !loading && (
+                <ModernCard>
+                  <Box textAlign="center" py={4}>
+                    <Typography 
+                      sx={{ 
+                        color: alpha('#ffffff', 0.6),
+                        fontStyle: 'italic',
+                        fontSize: '1.1rem'
+                      }}
+                    >
+                      {selectedFilter === 'all' 
+                        ? 'No users found in this guild 👻' 
+                        : `No users found with the selected role 🚫`
+                      }
+                    </Typography>
+                  </Box>
+                </ModernCard>
+              )}
+            </>
+          )}
           
-          {users.length === 0 && (
+          {selectedFilter === null && !loadingFilters && (
             <ModernCard>
-              <Box textAlign="center" py={4}>
+              <Box textAlign="center" py={8}>
+                <Typography 
+                  variant="h6"
+                  sx={{ 
+                    color: alpha('#ffffff', 0.8),
+                    fontWeight: 600,
+                    mb: 2
+                  }}
+                >
+                  🎯 Select a Role Filter
+                </Typography>
                 <Typography 
                   sx={{ 
                     color: alpha('#ffffff', 0.6),
@@ -620,7 +791,7 @@ const Users = () => {
                     fontSize: '1.1rem'
                   }}
                 >
-                  No users found in this guild 👻
+                  Choose a role filter above to view guild members
                 </Typography>
               </Box>
             </ModernCard>

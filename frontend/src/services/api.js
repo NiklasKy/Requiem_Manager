@@ -63,10 +63,13 @@ export const apiService = {
   },
 
   // Search users
-  async searchUsers(query, guildId = null) {
+  async searchUsers(query, guildId = null, roleFilter = null) {
     const params = { q: query };
     if (guildId) {
       params.guild_id = guildId;
+    }
+    if (roleFilter) {
+      params.role_filter = roleFilter;
     }
     const response = await api.get('/api/users/search', { params });
     return response.data;
@@ -90,10 +93,18 @@ export const apiService = {
   },
 
   // Get guild users
-  async getGuildUsers(guildId, activeOnly = true) {
-    const response = await api.get(`/api/servers/${guildId}/users`, {
-      params: { active_only: activeOnly }
-    });
+  async getGuildUsers(guildId, activeOnly = true, roleFilter = null) {
+    const params = { active_only: activeOnly };
+    if (roleFilter) {
+      params.role_filter = roleFilter;
+    }
+    const response = await api.get(`/api/servers/${guildId}/users`, { params });
+    return response.data;
+  },
+
+  // Get role filters
+  async getRoleFilters(guildId) {
+    const response = await api.get(`/api/servers/${guildId}/role-filters`);
     return response.data;
   },
 

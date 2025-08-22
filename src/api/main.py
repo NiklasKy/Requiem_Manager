@@ -418,20 +418,50 @@ async def get_bulk_user_roles(guild_id: int, user_ids: str = Query(...)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/users/search")
-async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(None)):
-    """Search for users by username, display name, or role name"""
+async def search_users(
+    q: str = Query(..., min_length=2), 
+    guild_id: int = Query(None), 
+    role_filter: str = Query(None, description="Filter by specific role ID")
+):
+    """Search for users by username, display name, or role name with optional role filtering"""
     try:
         import aiosqlite
         async with aiosqlite.connect(db.db_path) as conn:
             if guild_id:
-                # Search by username, display name, nickname, or role name in specific guild
-                cursor = await conn.execute("""
+                # Base query for guild-specific search
+                base_query = """
                     SELECT DISTINCT u.user_id, u.username, u.display_name, u.avatar_url, u.last_seen, gm.nickname, gm.joined_at
                     FROM users u
                     JOIN guild_members gm ON u.user_id = gm.user_id
                     LEFT JOIN role_changes rc ON u.user_id = rc.user_id AND rc.guild_id = gm.guild_id
                     LEFT JOIN roles r ON rc.role_id = r.role_id
-                    WHERE gm.guild_id = ? AND gm.is_active = 1 AND (
+                    WHERE gm.guild_id = ? AND gm.is_active = 1
+                """
+                
+                params = [guild_id]
+                
+                # Add role filter if specified
+                if role_filter and role_filter != "all":
+                    base_query += """
+                        AND u.user_id IN (
+                            SELECT DISTINCT rc2.user_id 
+                            FROM role_changes rc2
+                            INNER JOIN (
+                                SELECT role_id, user_id, MAX(changed_at) as latest_change
+                                FROM role_changes 
+                                WHERE guild_id = ? AND role_id = ?
+                                GROUP BY role_id, user_id
+                            ) latest ON rc2.role_id = latest.role_id 
+                                       AND rc2.user_id = latest.user_id 
+                                       AND rc2.changed_at = latest.latest_change
+                            WHERE rc2.action IN ('added', 'initial') AND rc2.role_id = ?
+                        )
+                    """
+                    params.extend([guild_id, role_filter, role_filter])
+                
+                # Add search conditions
+                base_query += """
+                    AND (
                         u.username LIKE ? OR 
                         u.display_name LIKE ? OR 
                         gm.nickname LIKE ? OR
@@ -439,7 +469,10 @@ async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(
                     )
                     ORDER BY u.last_seen DESC
                     LIMIT 20
-                """, (guild_id, f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"))
+                """
+                params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
+                
+                cursor = await conn.execute(base_query, params)
             else:
                 # Search by username or display name only (global search)
                 cursor = await conn.execute("""
@@ -470,8 +503,12 @@ async def search_users(q: str = Query(..., min_length=2), guild_id: int = Query(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/servers/{guild_id}/users")
-async def get_guild_users(guild_id: int, active_only: bool = Query(True)):
-    """Get users in a specific guild"""
+async def get_guild_users(
+    guild_id: int, 
+    active_only: bool = Query(True), 
+    role_filter: str = Query(None, description="Filter by specific role ID")
+):
+    """Get users in a specific guild with optional role filtering"""
     try:
         import aiosqlite
         async with aiosqlite.connect(db.db_path) as conn:
@@ -482,12 +519,33 @@ async def get_guild_users(guild_id: int, active_only: bool = Query(True)):
                 WHERE gm.guild_id = ?
             """
             
+            params = [guild_id]
+            
             if active_only:
                 query += " AND gm.is_active = TRUE"
             
+            # Add role filter if specified
+            if role_filter and role_filter != "all":
+                query += """
+                    AND u.user_id IN (
+                        SELECT DISTINCT rc.user_id 
+                        FROM role_changes rc
+                        INNER JOIN (
+                            SELECT role_id, user_id, MAX(changed_at) as latest_change
+                            FROM role_changes 
+                            WHERE guild_id = ? AND role_id = ?
+                            GROUP BY role_id, user_id
+                        ) latest ON rc.role_id = latest.role_id 
+                                   AND rc.user_id = latest.user_id 
+                                   AND rc.changed_at = latest.latest_change
+                        WHERE rc.action IN ('added', 'initial') AND rc.role_id = ?
+                    )
+                """
+                params.extend([guild_id, role_filter, role_filter])
+            
             query += " ORDER BY gm.joined_at DESC"
             
-            cursor = await conn.execute(query, (guild_id,))
+            cursor = await conn.execute(query, params)
             users = await cursor.fetchall()
             
             return [
@@ -504,6 +562,74 @@ async def get_guild_users(guild_id: int, active_only: bool = Query(True)):
         
     except Exception as e:
         logger.error(f"Error getting guild users: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/servers/{guild_id}/role-filters")
+async def get_role_filters(guild_id: int):
+    """Get available role filters from environment configuration and database"""
+    try:
+        import os
+        import aiosqlite
+        
+        # Get filter role IDs and default filter from environment
+        filter_roles_env = os.getenv('FILTER_ROLES', '')
+        default_filter = os.getenv('DEFAULT_FILTER_ROLE', 'all')
+        
+        # Default "All" filter
+        filters = [
+            {
+                "role_id": "all",
+                "role_name": "All Users",
+                "role_color": "#5865f2"
+            }
+        ]
+        
+        # Parse filter role IDs and fetch details from database
+        if filter_roles_env:
+            role_ids = [role_id.strip() for role_id in filter_roles_env.split(',') if role_id.strip()]
+            
+            if role_ids:
+                async with aiosqlite.connect(db.db_path) as conn:
+                    # Create placeholders for the IN clause
+                    placeholders = ','.join('?' * len(role_ids))
+                    
+                    # Fetch role details from database
+                    cursor = await conn.execute(f"""
+                        SELECT role_id, name, color
+                        FROM roles 
+                        WHERE role_id IN ({placeholders}) AND guild_id = ?
+                    """, role_ids + [guild_id])
+                    
+                    roles_data = await cursor.fetchall()
+                    
+                    def int_to_hex_color(color_int):
+                        """Convert Discord color integer to hex string"""
+                        if color_int is None or color_int == 0:
+                            return "#99aab5"  # Default Discord color
+                        return f"#{color_int:06x}"
+                    
+                    # Create a dictionary for fast lookup
+                    roles_dict = {
+                        str(role_data[0]): {
+                            "role_id": str(role_data[0]),
+                            "role_name": role_data[1],
+                            "role_color": int_to_hex_color(role_data[2])
+                        }
+                        for role_data in roles_data
+                    }
+                    
+                    # Add roles in the order specified in .env
+                    for role_id in role_ids:
+                        if role_id in roles_dict:
+                            filters.append(roles_dict[role_id])
+        
+        return {
+            "filters": filters,
+            "default_filter": default_filter.strip() if default_filter else "all"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting role filters: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.exception_handler(404)
