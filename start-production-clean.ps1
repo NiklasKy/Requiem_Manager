@@ -90,6 +90,26 @@ if ($missing.Count -gt 0) {
 
 Write-ColorMessage "[SUCCESS] Environment loaded" "Green"
 
+# Debug: Show loaded environment variables
+Write-ColorMessage ""
+Write-ColorMessage "🔍 Loaded Environment Variables:" "Cyan"
+$debugVars = @("DOMAIN", "DISCORD_CLIENT_ID", "DISCORD_REDIRECT_URI", "DISCORD_GUILD_ID", "ADMIN_USER_IDS", "GUEST_USER_IDS", "FILTER_ROLES", "DEFAULT_FILTER_ROLE")
+foreach ($var in $debugVars) {
+    if ($env.ContainsKey($var) -and -not [string]::IsNullOrEmpty($env[$var])) {
+        $value = $env[$var]
+        # Mask sensitive values
+        if ($var -like "*SECRET*" -or $var -like "*TOKEN*") {
+            $value = "*****"
+        } elseif ($var -eq "DISCORD_CLIENT_ID" -and $value.Length -gt 8) {
+            $value = $value.Substring(0, 8) + "****"
+        }
+        Write-ColorMessage "   $var = $value" "White"
+    } else {
+        Write-ColorMessage "   $var = (not set)" "Yellow"
+    }
+}
+Write-ColorMessage ""
+
 # Check SSL certificate
 if (-not $SkipSSLCheck) {
     Write-ColorMessage "[INFO] Checking SSL certificate..." "Yellow"
