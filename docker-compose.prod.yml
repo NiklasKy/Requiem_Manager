@@ -1,5 +1,9 @@
 version: '3.8'
 
+# Load production environment file
+env_file:
+  - .env.production
+
 services:
   # Nginx Reverse Proxy with SSL
   nginx:
