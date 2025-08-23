@@ -228,4 +228,4 @@ if (-not $NoLogs -and $restart) {
 }
 
 Write-ColorMessage ""
-Write-ColorMessage "Ready! Visit https://$domain" "Green"
+Write-Host "Ready! Visit https://$domain" -ForegroundColor Green
