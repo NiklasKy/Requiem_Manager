@@ -90,26 +90,6 @@ if ($missing.Count -gt 0) {
 
 Write-ColorMessage "[SUCCESS] Environment loaded" "Green"
 
-# Debug: Show loaded environment variables
-Write-ColorMessage ""
-Write-ColorMessage "🔍 Loaded Environment Variables:" "Cyan"
-$debugVars = @("DOMAIN", "DISCORD_CLIENT_ID", "DISCORD_REDIRECT_URI", "DISCORD_GUILD_ID", "ADMIN_USER_IDS", "GUEST_USER_IDS", "FILTER_ROLES", "DEFAULT_FILTER_ROLE")
-foreach ($var in $debugVars) {
-    if ($env.ContainsKey($var) -and -not [string]::IsNullOrEmpty($env[$var])) {
-        $value = $env[$var]
-        # Mask sensitive values
-        if ($var -like "*SECRET*" -or $var -like "*TOKEN*") {
-            $value = "*****"
-        } elseif ($var -eq "DISCORD_CLIENT_ID" -and $value.Length -gt 8) {
-            $value = $value.Substring(0, 8) + "****"
-        }
-        Write-ColorMessage "   $var = $value" "White"
-    } else {
-        Write-ColorMessage "   $var = (not set)" "Yellow"
-    }
-}
-Write-ColorMessage ""
-
 # Check SSL certificate
 if (-not $SkipSSLCheck) {
     Write-ColorMessage "[INFO] Checking SSL certificate..." "Yellow"
@@ -129,7 +109,7 @@ if (-not $SkipSSLCheck) {
                 exit 1
             }
         }
-        Write-ColorMessage "WARNING: Starting without SSL" "Yellow"
+        Write-ColorMessage "[WARNING] Starting without SSL" "Yellow"
     }
 }
 
@@ -170,7 +150,7 @@ if ($restart) {
     # Start containers
     Write-ColorMessage "[INFO] Starting containers..." "Yellow"
     try {
-        docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+        docker-compose -f docker-compose.prod.yml up -d --build
         if ($LASTEXITCODE -eq 0) {
             Write-ColorMessage "[SUCCESS] Containers started" "Green"
         } else {
@@ -226,3 +206,6 @@ if (-not $NoLogs -and $restart) {
         docker-compose -f docker-compose.prod.yml logs -f
     }
 }
+
+Write-ColorMessage ""
+Write-ColorMessage "🎉 Ready! Visit https://$domain" "Green"
