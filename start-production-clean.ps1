@@ -129,7 +129,7 @@ if (-not $SkipSSLCheck) {
                 exit 1
             }
         }
-        Write-ColorMessage "[WARNING] Starting without SSL" "Yellow"
+        Write-ColorMessage "WARNING: Starting without SSL" "Yellow"
     }
 }
 
