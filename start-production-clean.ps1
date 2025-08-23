@@ -226,6 +226,3 @@ if (-not $NoLogs -and $restart) {
         docker-compose -f docker-compose.prod.yml logs -f
     }
 }
-
-Write-ColorMessage ""
-Write-Host "Ready! Visit https://$domain" -ForegroundColor Green
