@@ -254,12 +254,15 @@ Important:
                 reverse=True
             )
             
-            # Create result embed
+            # Create result embed with timestamp
+            now = datetime.utcnow()
+            timestamp_unix = int(now.timestamp())
+            
             result_embed = discord.Embed(
                 title="📊 Activity Analysis Results",
-                description=f"Found **{len(sorted_members)}** unique members from {len(images)} image(s)",
+                description=f"<t:{timestamp_unix}:F>\n\nFound **{len(sorted_members)}** unique members from {len(images)} image(s)",
                 color=discord.Color.green(),
-                timestamp=datetime.utcnow()
+                timestamp=now
             )
             
             # Add member data to embed (split into multiple fields if needed)
@@ -302,16 +305,11 @@ Important:
                         inline=False
                     )
                 
-                # Add summary statistics
-                total_points = sum(m["week_activity_points"] for m in sorted_members)
-                avg_points = total_points / len(sorted_members) if sorted_members else 0
-                
+                # Add summary statistics (only highest and lowest)
                 result_embed.add_field(
-                    name="📈 Statistics",
-                    value=f"**Total Points**: {total_points:,}\n"
-                          f"**Average Points**: {avg_points:,.1f}\n"
-                          f"**Highest**: {sorted_members[0]['member_name']} ({sorted_members[0]['week_activity_points']:,})\n"
-                          f"**Lowest**: {sorted_members[-1]['member_name']} ({sorted_members[-1]['week_activity_points']:,})",
+                    name="📈 Summary",
+                    value=f"**Highest**: {sorted_members[0]['member_name']} ({sorted_members[0]['week_activity_points']:,} points)\n"
+                          f"**Lowest**: {sorted_members[-1]['member_name']} ({sorted_members[-1]['week_activity_points']:,} points)",
                     inline=False
                 )
             else:
