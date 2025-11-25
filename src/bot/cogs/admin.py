@@ -30,6 +30,32 @@ class AdminCog(commands.Cog):
                 ephemeral=True
             )
     
+    @app_commands.command(name="clear_commands", description="Clear all slash commands and resync (Admin only)")
+    @app_commands.default_permissions(administrator=True)
+    async def clear_commands(self, interaction: discord.Interaction):
+        """Clear all slash commands from the guild and resync"""
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            # Clear guild commands
+            self.bot.tree.clear_commands(guild=interaction.guild)
+            await self.bot.tree.sync(guild=interaction.guild)
+            
+            # Re-sync with current commands
+            synced = await self.bot.tree.sync(guild=interaction.guild)
+            
+            await interaction.followup.send(
+                f"✅ Cleared old commands and synced {len(synced)} new commands to this guild.",
+                ephemeral=True
+            )
+            logger.info(f"Cleared and synced {len(synced)} commands to guild {interaction.guild.id}")
+        except Exception as e:
+            logger.error(f"Error clearing/syncing commands: {e}")
+            await interaction.followup.send(
+                f"❌ Error clearing/syncing commands: {e}",
+                ephemeral=True
+            )
+    
     @app_commands.command(name="database_stats", description="Get database statistics (Admin only)")
     @app_commands.default_permissions(administrator=True)
     async def database_stats(self, interaction: discord.Interaction):
@@ -177,7 +203,8 @@ class AdminCog(commands.Cog):
             value="`/user_stats` - User statistics\n"
                   "`/server_stats` - Server statistics\n"
                   "`/recent_changes` - Recent changes\n"
-                  "`/role_history` - Role history",
+                  "`/role_history` - Role history\n"
+                  "`/analyze_activity` - Analyze game activity screenshots",
             inline=False
         )
         

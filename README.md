@@ -6,6 +6,7 @@ A comprehensive Discord bot system for tracking user activities with a React-bas
 
 - **Discord Bot** with Cogs architecture and Slash Commands
 - **User Tracking**: Username, nickname, and role changes
+- **Activity Recognition**: AI-powered game screenshot analysis with OpenAI Vision
 - **SQLite Database** for persistent data storage  
 - **REST API** with FastAPI for data access
 - **React Dashboard** for modern data visualization
@@ -20,6 +21,7 @@ A comprehensive Discord bot system for tracking user activities with a React-bas
 - Discord Bot Token
 - Discord Guild (Server) ID
 - Discord OAuth2 Application (for authentication)
+- OpenAI API Key (for activity recognition feature)
 
 ## 🚀 Quick Start
 
@@ -41,6 +43,7 @@ DISCORD_GUILD_ID=your_guild_id_here
 DISCORD_CLIENT_ID=your_oauth_client_id_here
 DISCORD_CLIENT_SECRET=your_oauth_client_secret_here
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ### 3. Start System
@@ -70,7 +73,8 @@ Requiem_Manager/
 │   │   ├── main.py            # Bot Main File
 │   │   └── cogs/              # Bot Commands
 │   │       ├── tracking.py    # User-Tracking Commands
-│   │       └── admin.py       # Admin Commands
+│   │       ├── admin.py       # Admin Commands
+│   │       └── activity_recognition.py  # Activity Recognition with AI
 │   ├── database/              # Database
 │   │   └── database.py        # SQLite Handler
 │   └── api/                   # REST API
@@ -98,6 +102,7 @@ The bot provides the following slash commands:
 - `/recent_changes [limit]` - Show recent changes  
 - `/role_history <user>` - Role history of a user
 - `/server_stats` - Show server statistics
+- `/analyze_activity <image1> [image2-5]` - Analyze game activity screenshots to extract member names and weekly activity points
 
 ### Admin Commands (Administrator required)
 - `/sync` - Synchronize slash commands
@@ -192,6 +197,12 @@ JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 # Admin Configuration
 ADMIN_ROLE_IDS=123456789012345678,987654321098765432
 ADMIN_USER_IDS=242292116833697792
+
+# Moderator Configuration
+MOD_ROLE_IDS=123456789012345678,987654321098765432
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
 
 # Database Configuration  
 DATABASE_PATH=./data/tracking.db
@@ -298,6 +309,7 @@ For problems or questions:
 
 - [Discord OAuth2 Setup Guide](DISCORD_OAUTH_SETUP.md)
 - [Admin Configuration Guide](ADMIN_CONFIGURATION.md)
+- [Activity Recognition Guide](ACTIVITY_RECOGNITION_GUIDE.md) - AI-powered screenshot analysis
 
 ---
 

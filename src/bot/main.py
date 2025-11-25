@@ -49,7 +49,8 @@ class RequiemBot(commands.Bot):
         # Load cogs
         cogs_to_load = [
             'src.bot.cogs.tracking',
-            'src.bot.cogs.admin'
+            'src.bot.cogs.admin',
+            'src.bot.cogs.activity_recognition'
         ]
         
         for cog in cogs_to_load:
@@ -64,6 +65,8 @@ class RequiemBot(commands.Bot):
             guild_id = os.getenv('DISCORD_GUILD_ID')
             if guild_id:
                 guild = discord.Object(id=int(guild_id))
+                # Copy global commands to guild before syncing
+                self.tree.copy_global_to(guild=guild)
                 synced = await self.tree.sync(guild=guild)
                 logger.info(f"Synced {len(synced)} commands to guild {guild_id}")
             else:

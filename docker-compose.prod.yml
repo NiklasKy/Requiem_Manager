@@ -35,6 +35,10 @@ services:
       - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
       - DATABASE_PATH=/app/data/tracking.db
       - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - MOD_ROLE_IDS=${MOD_ROLE_IDS}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
