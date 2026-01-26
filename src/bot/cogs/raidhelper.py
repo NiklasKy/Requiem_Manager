@@ -43,11 +43,12 @@ class RaidHelperCog(commands.Cog):
                 return data.get('postedEvents', [])
     
     async def get_event_signups(self, event_id: str):
-        """Get signups for a specific event"""
+        """Get signups for a specific event using API v3"""
         if not self.api_key or not self.server_id:
             raise ValueError("Raid-Helper API not configured")
         
-        url = f"https://raid-helper.dev/api/v2/servers/{self.server_id}/events/{event_id}"
+        # Use API v3 instead of v2
+        url = f"https://raid-helper.dev/api/v3/servers/{self.server_id}/events/{event_id}"
         headers = {
             "Authorization": self.api_key,
             "Content-Type": "application/json"
@@ -141,9 +142,14 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count from advanced field
+                    # Get signup count - try multiple fields
                     advanced = event.get('advanced', {})
                     signup_count = advanced.get('signedUpUserCount', 0)
+                    
+                    # Fallback: count signUps array if advanced field is 0
+                    if signup_count == 0:
+                        signups = event.get('signUps', [])
+                        signup_count = len(signups) if signups else 0
                     
                     field_name = f"🔜 {title}" if idx == 0 else f"🎯 {title}"
                     
@@ -181,9 +187,14 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count from advanced field
+                    # Get signup count - try multiple fields
                     advanced = event.get('advanced', {})
                     signup_count = advanced.get('signedUpUserCount', 0)
+                    
+                    # Fallback: count signUps array if advanced field is 0
+                    if signup_count == 0:
+                        signups = event.get('signUps', [])
+                        signup_count = len(signups) if signups else 0
                     
                     embed.add_field(
                         name=f"⏱️ {title}",
@@ -235,19 +246,33 @@ class RaidHelperCog(commands.Cog):
                 )
                 return
             
-            # Get event data
+            # Get event data from API v3
             event_data = await self.get_event_signups(event_id)
+            
+            logger.info(f"Event data keys: {event_data.keys()}")
             
             # Extract event info
             event_title = event_data.get('title', 'Unknown Event')
+            
+            # API v3 structure: signUps can be nested in different places
             signups = event_data.get('signUps', [])
+            
+            # If signUps is empty, try to get it from advanced field
+            if not signups:
+                advanced = event_data.get('advanced', {})
+                signups = advanced.get('signUps', [])
+            
+            logger.info(f"Found {len(signups)} signups")
             
             # Get signed up user IDs
             signed_up_ids = set()
             for signup in signups:
-                user_id = signup.get('userId')
+                # Try different possible fields for user ID
+                user_id = signup.get('userId') or signup.get('id') or signup.get('user', {}).get('id')
                 if user_id:
                     signed_up_ids.add(str(user_id))
+            
+            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs")
             
             # Get role members
             role_members = role.members
