@@ -82,21 +82,37 @@ class RaidHelperCog(commands.Cog):
             # Get events
             all_events = await self.get_raid_helper_events()
             
+            logger.info(f"Total events from API: {len(all_events)}")
+            
             # Filter for upcoming/current events only
             now_timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)  # Raid-Helper uses milliseconds
-            
-            # Filter events: must have valid startTime and be in the future (or within last 6 hours)
-            six_hours_ago = now_timestamp - (6 * 60 * 60 * 1000)
+            one_day_ago = now_timestamp - (24 * 60 * 60 * 1000)  # 24 hours ago
             
             events = []
             for event in all_events:
                 start_time = event.get('startTime', 0)
-                # Only include events with valid start time and not too far in the past
-                if start_time and start_time > six_hours_ago:
+                event_id = event.get('id', 'Unknown')
+                title = event.get('title', 'Unknown')
+                
+                logger.info(f"Event: {title} (ID: {event_id}) - startTime: {start_time}")
+                
+                # Include events that:
+                # 1. Have a valid startTime (not 0 or None)
+                # 2. Are not older than 24 hours
+                if start_time and start_time > one_day_ago:
                     events.append(event)
+                    logger.info(f"  -> Included (startTime > {one_day_ago})")
+                else:
+                    logger.info(f"  -> Excluded (startTime: {start_time}, threshold: {one_day_ago})")
+            
+            logger.info(f"Filtered events: {len(events)}")
             
             if not events:
-                await interaction.followup.send("📅 No upcoming events found.")
+                await interaction.followup.send(
+                    f"📅 No upcoming events found.\n\n"
+                    f"Debug: Found {len(all_events)} total events from API, but none matched the filter criteria.",
+                    ephemeral=True
+                )
                 return
             
             # Create embed
