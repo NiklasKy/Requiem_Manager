@@ -42,26 +42,22 @@ class RaidHelperCog(commands.Cog):
                 data = await response.json()
                 return data.get('postedEvents', [])
     
-    async def get_event_signups(self, event_id: str):
-        """Get signups for a specific event using API v3"""
+    async def get_event_by_id(self, event_id: str):
+        """Get a specific event by ID from all events (API v3 doesn't support single event endpoint)"""
         if not self.api_key or not self.server_id:
             raise ValueError("Raid-Helper API not configured")
         
-        # Use API v3 instead of v2
-        url = f"https://raid-helper.dev/api/v3/servers/{self.server_id}/events/{event_id}"
-        headers = {
-            "Authorization": self.api_key,
-            "Content-Type": "application/json"
-        }
+        # API v3 doesn't have a single event endpoint, so we fetch all and filter
+        all_events = await self.get_raid_helper_events()
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"Raid-Helper API error: {response.status} - {error_text}")
-                    raise Exception(f"Raid-Helper API returned status {response.status}")
-                
-                return await response.json()
+        # Find the event with matching ID
+        for event in all_events:
+            if str(event.get('id')) == str(event_id):
+                logger.info(f"Found event: {event.get('title')} (ID: {event_id})")
+                return event
+        
+        # Event not found
+        raise Exception(f"Event with ID {event_id} not found")
     
     @app_commands.command(
         name="events",
@@ -246,33 +242,30 @@ class RaidHelperCog(commands.Cog):
                 )
                 return
             
-            # Get event data from API v3
-            event_data = await self.get_event_signups(event_id)
-            
-            logger.info(f"Event data keys: {event_data.keys()}")
+            # Get event data from API v3 (fetch all events and find this one)
+            event_data = await self.get_event_by_id(event_id)
             
             # Extract event info
             event_title = event_data.get('title', 'Unknown Event')
             
-            # API v3 structure: signUps can be nested in different places
+            # API v3 structure: signUps array
             signups = event_data.get('signUps', [])
             
-            # If signUps is empty, try to get it from advanced field
-            if not signups:
-                advanced = event_data.get('advanced', {})
-                signups = advanced.get('signUps', [])
-            
-            logger.info(f"Found {len(signups)} signups")
+            logger.info(f"Found {len(signups)} signups for event '{event_title}'")
             
             # Get signed up user IDs
             signed_up_ids = set()
             for signup in signups:
-                # Try different possible fields for user ID
-                user_id = signup.get('userId') or signup.get('id') or signup.get('user', {}).get('id')
+                # In API v3, the signup structure is different
+                # Each signup has a 'userId' field directly
+                user_id = signup.get('userId')
                 if user_id:
                     signed_up_ids.add(str(user_id))
+                else:
+                    # Debug: log the signup structure if userId is missing
+                    logger.warning(f"Signup missing userId: {signup.keys()}")
             
-            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs")
+            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs from signups")
             
             # Get role members
             role_members = role.members
