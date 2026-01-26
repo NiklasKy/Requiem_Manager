@@ -149,6 +149,14 @@ class RaidHelperCog(commands.Cog):
                     advanced = event.get('advanced', {})
                     signup_count = advanced.get('signedUpUserCount', 0)
                     
+                    # Debug logging for first event
+                    if idx == 0:
+                        logger.info(f"DEBUG - Event '{title}' (ID: {event_id})")
+                        logger.info(f"  - Has 'advanced' field: {bool(advanced)}")
+                        logger.info(f"  - Advanced keys: {list(advanced.keys()) if advanced else 'None'}")
+                        logger.info(f"  - signedUpUserCount: {signup_count}")
+                        logger.info(f"  - All event keys: {list(event.keys())}")
+                    
                     field_name = f"🔜 {title}" if idx == 0 else f"🎯 {title}"
                     
                     embed.add_field(
