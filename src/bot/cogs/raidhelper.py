@@ -255,17 +255,24 @@ class RaidHelperCog(commands.Cog):
             
             # Get signed up user IDs
             signed_up_ids = set()
+            
+            # Debug: Log first signup structure
+            if signups:
+                logger.info(f"First signup structure: {signups[0]}")
+            
             for signup in signups:
                 # In API v3, the signup structure is different
                 # Each signup has a 'userId' field directly
                 user_id = signup.get('userId')
                 if user_id:
                     signed_up_ids.add(str(user_id))
+                    logger.info(f"Added user ID from signup: {user_id}")
                 else:
                     # Debug: log the signup structure if userId is missing
                     logger.warning(f"Signup missing userId: {signup.keys()}")
             
-            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs from signups")
+            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs from signups: {signed_up_ids}")
+            logger.info(f"Role member IDs: {set(role_member_ids.keys())}")
             
             # Get role members
             role_members = role.members
