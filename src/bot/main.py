@@ -50,7 +50,8 @@ class RequiemBot(commands.Bot):
         cogs_to_load = [
             'src.bot.cogs.tracking',
             'src.bot.cogs.admin',
-            'src.bot.cogs.activity_recognition'
+            'src.bot.cogs.activity_recognition',
+            'src.bot.cogs.raidhelper'
         ]
         
         for cog in cogs_to_load:

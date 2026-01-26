@@ -21,6 +21,8 @@ services:
       - ADMIN_ROLE_IDS=${ADMIN_ROLE_IDS}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - MOD_ROLE_IDS=${MOD_ROLE_IDS}
+      - RAIDHELPER_API_KEY=${RAIDHELPER_API_KEY}
+      - RAIDHELPER_SERVER_ID=${RAIDHELPER_SERVER_ID}
     depends_on:
       - api-dev
     networks:

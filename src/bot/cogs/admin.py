@@ -204,7 +204,9 @@ class AdminCog(commands.Cog):
                   "`/server_stats` - Server statistics\n"
                   "`/recent_changes` - Recent changes\n"
                   "`/role_history` - Role history\n"
-                  "`/analyze_activity` - Analyze game activity screenshots",
+                  "`/analyze_activity` - Analyze game activity screenshots\n"
+                  "`/events` - List active Raid-Helper events\n"
+                  "`/checksignups` - Compare role members with event signups",
             inline=False
         )
         
