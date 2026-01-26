@@ -80,16 +80,29 @@ class RaidHelperCog(commands.Cog):
                 return
             
             # Get events
-            events = await self.get_raid_helper_events()
+            all_events = await self.get_raid_helper_events()
+            
+            # Filter for upcoming/current events only
+            now_timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)  # Raid-Helper uses milliseconds
+            
+            # Filter events: must have valid startTime and be in the future (or within last 6 hours)
+            six_hours_ago = now_timestamp - (6 * 60 * 60 * 1000)
+            
+            events = []
+            for event in all_events:
+                start_time = event.get('startTime', 0)
+                # Only include events with valid start time and not too far in the past
+                if start_time and start_time > six_hours_ago:
+                    events.append(event)
             
             if not events:
-                await interaction.followup.send("📅 No active events found.")
+                await interaction.followup.send("📅 No upcoming events found.")
                 return
             
             # Create embed
             embed = discord.Embed(
-                title="📅 Active Raid-Helper Events",
-                description=f"Found {len(events)} active event(s)",
+                title="📅 Upcoming Raid-Helper Events",
+                description=f"Found {len(events)} upcoming event(s)",
                 color=discord.Color.blue(),
                 timestamp=datetime.now(timezone.utc)
             )
