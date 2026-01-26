@@ -85,8 +85,9 @@ class RaidHelperCog(commands.Cog):
             logger.info(f"Total events from API: {len(all_events)}")
             
             # Filter for upcoming/current events only
-            now_timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)  # Raid-Helper uses milliseconds
-            one_day_ago = now_timestamp - (24 * 60 * 60 * 1000)  # 24 hours ago
+            # Raid-Helper API returns timestamps in SECONDS (not milliseconds)
+            now_timestamp = int(datetime.now(timezone.utc).timestamp())
+            one_day_ago = now_timestamp - (24 * 60 * 60)  # 24 hours ago in seconds
             
             events = []
             for event in all_events:
@@ -94,25 +95,16 @@ class RaidHelperCog(commands.Cog):
                 event_id = event.get('id', 'Unknown')
                 title = event.get('title', 'Unknown')
                 
-                logger.info(f"Event: {title} (ID: {event_id}) - startTime: {start_time}")
-                
                 # Include events that:
                 # 1. Have a valid startTime (not 0 or None)
                 # 2. Are not older than 24 hours
                 if start_time and start_time > one_day_ago:
                     events.append(event)
-                    logger.info(f"  -> Included (startTime > {one_day_ago})")
-                else:
-                    logger.info(f"  -> Excluded (startTime: {start_time}, threshold: {one_day_ago})")
             
-            logger.info(f"Filtered events: {len(events)}")
+            logger.info(f"Filtered events: {len(events)} (from {len(all_events)} total)")
             
             if not events:
-                await interaction.followup.send(
-                    f"📅 No upcoming events found.\n\n"
-                    f"Debug: Found {len(all_events)} total events from API, but none matched the filter criteria.",
-                    ephemeral=True
-                )
+                await interaction.followup.send("📅 No upcoming events found.")
                 return
             
             # Create embed
@@ -133,10 +125,9 @@ class RaidHelperCog(commands.Cog):
                 start_time = event.get('startTime', 0)
                 leader_id = event.get('leaderId', 'Unknown')
                 
-                # Format start time
+                # Format start time (API returns seconds, not milliseconds)
                 if start_time:
-                    dt = datetime.fromtimestamp(start_time / 1000, tz=timezone.utc)
-                    time_str = f"<t:{int(dt.timestamp())}:F>"
+                    time_str = f"<t:{start_time}:F>"
                 else:
                     time_str = "No date set"
                 
