@@ -42,22 +42,28 @@ class RaidHelperCog(commands.Cog):
                 data = await response.json()
                 return data.get('postedEvents', [])
     
-    async def get_event_by_id(self, event_id: str):
-        """Get a specific event by ID from all events (API v3 doesn't support single event endpoint)"""
-        if not self.api_key or not self.server_id:
+    async def get_event_signups_v2(self, event_id: str):
+        """Get signups for a specific event using API v2 (which returns ALL signups)"""
+        if not self.api_key:
             raise ValueError("Raid-Helper API not configured")
         
-        # API v3 doesn't have a single event endpoint, so we fetch all and filter
-        all_events = await self.get_raid_helper_events()
+        # Use API v2 for getting event details with ALL signups
+        url = f"https://raid-helper.dev/api/v2/events/{event_id}"
+        headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json"
+        }
         
-        # Find the event with matching ID
-        for event in all_events:
-            if str(event.get('id')) == str(event_id):
-                logger.info(f"Found event: {event.get('title')} (ID: {event_id})")
-                return event
-        
-        # Event not found
-        raise Exception(f"Event with ID {event_id} not found")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Raid-Helper API v2 error: {response.status} - {error_text}")
+                    raise Exception(f"Raid-Helper API v2 returned status {response.status}")
+                
+                data = await response.json()
+                logger.info(f"Successfully fetched event data from API v2")
+                return data
     
     @app_commands.command(
         name="events",
@@ -242,41 +248,31 @@ class RaidHelperCog(commands.Cog):
                 )
                 return
             
-            # Get event data from API v3 (fetch all events and find this one)
-            event_data = await self.get_event_by_id(event_id)
+            # Get event data from API v2 (which returns ALL signups, not just yours)
+            event_data = await self.get_event_signups_v2(event_id)
             
             # Extract event info
             event_title = event_data.get('title', 'Unknown Event')
             
-            # API v3 structure: signUps array
+            # Get role members
+            role_members = role.members
+            role_member_ids = {str(member.id): member for member in role_members}
+            
+            # API v2 structure: signUps array contains ALL signups
             signups = event_data.get('signUps', [])
             
-            logger.info(f"Found {len(signups)} signups for event '{event_title}'")
+            logger.info(f"Found {len(signups)} total signups for event '{event_title}'")
             
             # Get signed up user IDs
             signed_up_ids = set()
             
-            # Debug: Log first signup structure
-            if signups:
-                logger.info(f"First signup structure: {signups[0]}")
-            
             for signup in signups:
-                # In API v3, the signup structure is different
-                # Each signup has a 'userId' field directly
                 user_id = signup.get('userId')
                 if user_id:
                     signed_up_ids.add(str(user_id))
-                    logger.info(f"Added user ID from signup: {user_id}")
-                else:
-                    # Debug: log the signup structure if userId is missing
-                    logger.warning(f"Signup missing userId: {signup.keys()}")
             
-            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs from signups: {signed_up_ids}")
-            logger.info(f"Role member IDs: {set(role_member_ids.keys())}")
-            
-            # Get role members
-            role_members = role.members
-            role_member_ids = {str(member.id): member for member in role_members}
+            logger.info(f"Extracted {len(signed_up_ids)} unique user IDs from signups")
+            logger.info(f"Role has {len(role_member_ids)} members")
             
             # Compare
             signed_up = []
