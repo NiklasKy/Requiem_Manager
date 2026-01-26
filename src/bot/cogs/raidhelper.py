@@ -14,12 +14,12 @@ class RaidHelperCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.api_key = os.getenv('RAIDHELPER_API_KEY')
-        self.server_id = os.getenv('RAIDHELPER_SERVER_ID')
+        self.server_id = os.getenv('DISCORD_GUILD_ID')
         
         if not self.api_key:
             logger.warning("RAIDHELPER_API_KEY not configured. Raid-Helper commands will not work.")
         if not self.server_id:
-            logger.warning("RAIDHELPER_SERVER_ID not configured. Raid-Helper commands will not work.")
+            logger.warning("DISCORD_GUILD_ID not configured. Raid-Helper commands will not work.")
     
     async def get_raid_helper_events(self):
         """Get all events from Raid-Helper API"""
