@@ -144,14 +144,10 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count - try multiple fields
+                    # Get signup count from advanced field (API v3)
+                    # Note: signUps array in v3 only contains YOUR OWN signups, so we use signedUpUserCount
                     advanced = event.get('advanced', {})
                     signup_count = advanced.get('signedUpUserCount', 0)
-                    
-                    # Fallback: count signUps array if advanced field is 0
-                    if signup_count == 0:
-                        signups = event.get('signUps', [])
-                        signup_count = len(signups) if signups else 0
                     
                     field_name = f"🔜 {title}" if idx == 0 else f"🎯 {title}"
                     
@@ -189,14 +185,10 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count - try multiple fields
+                    # Get signup count from advanced field (API v3)
+                    # Note: signUps array in v3 only contains YOUR OWN signups, so we use signedUpUserCount
                     advanced = event.get('advanced', {})
                     signup_count = advanced.get('signedUpUserCount', 0)
-                    
-                    # Fallback: count signUps array if advanced field is 0
-                    if signup_count == 0:
-                        signups = event.get('signUps', [])
-                        signup_count = len(signups) if signups else 0
                     
                     embed.add_field(
                         name=f"⏱️ {title}",
@@ -228,13 +220,20 @@ class RaidHelperCog(commands.Cog):
     )
     @app_commands.describe(
         role="The Discord role to check",
-        event_id="The Raid-Helper event ID (use /events to get IDs)"
+        event_id="The Raid-Helper event ID (use /events to get IDs)",
+        filter="Filter results: all (default), signed (only signed up), or notsigned (only not signed up)"
     )
+    @app_commands.choices(filter=[
+        app_commands.Choice(name="All members", value="all"),
+        app_commands.Choice(name="Only signed up", value="signed"),
+        app_commands.Choice(name="Only NOT signed up", value="notsigned")
+    ])
     async def check_signups(
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        event_id: str
+        event_id: str,
+        filter: str = "all"
     ):
         """Check which role members have signed up for an event"""
         try:
@@ -285,10 +284,17 @@ class RaidHelperCog(commands.Cog):
                     not_signed_up.append(member)
             
             # Create embed
+            filter_text = {
+                "all": "All members",
+                "signed": "Only signed up members",
+                "notsigned": "Only NOT signed up members"
+            }.get(filter, "All members")
+            
             embed = discord.Embed(
                 title=f"📊 Signup Check: {event_title}",
                 description=f"**Role**: {role.mention}\n"
-                           f"**Event ID**: `{event_id}`",
+                           f"**Event ID**: `{event_id}`\n"
+                           f"**Filter**: {filter_text}",
                 color=discord.Color.green() if len(not_signed_up) == 0 else discord.Color.orange(),
                 timestamp=datetime.now(timezone.utc)
             )
@@ -307,41 +313,94 @@ class RaidHelperCog(commands.Cog):
                 inline=False
             )
             
-            # Add signed up members (if not too many)
-            if signed_up and len(signed_up) <= 20:
-                signed_up_str = "\n".join([f"✅ {member.mention}" for member in signed_up])
-                embed.add_field(
-                    name=f"✅ Signed Up ({len(signed_up)})",
-                    value=signed_up_str[:1024],  # Discord field limit
-                    inline=False
-                )
-            elif signed_up:
-                embed.add_field(
-                    name=f"✅ Signed Up ({len(signed_up)})",
-                    value=f"Too many to list ({len(signed_up)} members)",
-                    inline=False
-                )
+            # Determine how many members to show based on filter
+            # If showing both lists, limit to 20 each. If only one list, allow up to 50
+            max_members_per_list = 50 if filter != "all" else 20
             
-            # Add not signed up members (if not too many)
-            if not_signed_up and len(not_signed_up) <= 20:
-                not_signed_up_str = "\n".join([f"❌ {member.mention}" for member in not_signed_up])
-                embed.add_field(
-                    name=f"❌ Not Signed Up ({len(not_signed_up)})",
-                    value=not_signed_up_str[:1024],  # Discord field limit
-                    inline=False
-                )
-            elif not_signed_up:
-                embed.add_field(
-                    name=f"❌ Not Signed Up ({len(not_signed_up)})",
-                    value=f"Too many to list ({len(not_signed_up)} members)",
-                    inline=False
-                )
+            # Add signed up members based on filter
+            if filter in ["all", "signed"]:
+                if signed_up:
+                    if len(signed_up) <= max_members_per_list:
+                        signed_up_str = "\n".join([f"✅ {member.mention}" for member in signed_up])
+                        embed.add_field(
+                            name=f"✅ Signed Up ({len(signed_up)})",
+                            value=signed_up_str[:1024],  # Discord field limit
+                            inline=False
+                        )
+                        # If still more to show, split into multiple fields
+                        if len(signed_up_str) > 1024:
+                            remaining = signed_up_str[1024:]
+                            embed.add_field(
+                                name="✅ Signed Up (continued)",
+                                value=remaining[:1024],
+                                inline=False
+                            )
+                    else:
+                        # Show first members and indicate there are more
+                        shown_members = signed_up[:max_members_per_list]
+                        signed_up_str = "\n".join([f"✅ {member.mention}" for member in shown_members])
+                        embed.add_field(
+                            name=f"✅ Signed Up ({len(signed_up)})",
+                            value=f"{signed_up_str[:1024]}\n... and {len(signed_up) - max_members_per_list} more",
+                            inline=False
+                        )
+                elif filter == "signed":
+                    embed.add_field(
+                        name="✅ Signed Up",
+                        value="No members signed up yet.",
+                        inline=False
+                    )
             
-            # Add color indicator
-            if not_signed_up_count == 0:
-                embed.set_footer(text="🎉 Everyone has signed up!")
-            else:
-                embed.set_footer(text=f"⚠️ {not_signed_up_count} member(s) haven't signed up yet")
+            # Add not signed up members based on filter
+            if filter in ["all", "notsigned"]:
+                if not_signed_up:
+                    if len(not_signed_up) <= max_members_per_list:
+                        not_signed_up_str = "\n".join([f"❌ {member.mention}" for member in not_signed_up])
+                        embed.add_field(
+                            name=f"❌ Not Signed Up ({len(not_signed_up)})",
+                            value=not_signed_up_str[:1024],  # Discord field limit
+                            inline=False
+                        )
+                        # If still more to show, split into multiple fields
+                        if len(not_signed_up_str) > 1024:
+                            remaining = not_signed_up_str[1024:]
+                            embed.add_field(
+                                name="❌ Not Signed Up (continued)",
+                                value=remaining[:1024],
+                                inline=False
+                            )
+                    else:
+                        # Show first members and indicate there are more
+                        shown_members = not_signed_up[:max_members_per_list]
+                        not_signed_up_str = "\n".join([f"❌ {member.mention}" for member in shown_members])
+                        embed.add_field(
+                            name=f"❌ Not Signed Up ({len(not_signed_up)})",
+                            value=f"{not_signed_up_str[:1024]}\n... and {len(not_signed_up) - max_members_per_list} more",
+                            inline=False
+                        )
+                elif filter == "notsigned":
+                    embed.add_field(
+                        name="❌ Not Signed Up",
+                        value="All members have signed up! 🎉",
+                        inline=False
+                    )
+            
+            # Add footer based on filter and status
+            if filter == "signed":
+                if signed_up_count > 0:
+                    embed.set_footer(text=f"Showing {min(len(signed_up), max_members_per_list)} of {signed_up_count} signed up member(s)")
+                else:
+                    embed.set_footer(text="No signed up members to display")
+            elif filter == "notsigned":
+                if not_signed_up_count > 0:
+                    embed.set_footer(text=f"⚠️ Showing {min(len(not_signed_up), max_members_per_list)} of {not_signed_up_count} member(s) who haven't signed up")
+                else:
+                    embed.set_footer(text="🎉 Everyone has signed up!")
+            else:  # filter == "all"
+                if not_signed_up_count == 0:
+                    embed.set_footer(text="🎉 Everyone has signed up!")
+                else:
+                    embed.set_footer(text=f"⚠️ {not_signed_up_count} member(s) haven't signed up yet")
             
             await interaction.followup.send(embed=embed)
             
