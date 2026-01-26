@@ -84,72 +84,121 @@ class RaidHelperCog(commands.Cog):
             
             logger.info(f"Total events from API: {len(all_events)}")
             
-            # Filter for upcoming/current events only
-            # Raid-Helper API returns timestamps in SECONDS (not milliseconds)
+            # Raid-Helper API returns timestamps in SECONDS
             now_timestamp = int(datetime.now(timezone.utc).timestamp())
-            one_day_ago = now_timestamp - (24 * 60 * 60)  # 24 hours ago in seconds
+            one_day_ago = now_timestamp - (24 * 60 * 60)
             
-            events = []
+            # Split events into upcoming and recent past
+            upcoming_events = []
+            past_events = []
+            
             for event in all_events:
                 start_time = event.get('startTime', 0)
-                event_id = event.get('id', 'Unknown')
-                title = event.get('title', 'Unknown')
                 
-                # Include events that:
-                # 1. Have a valid startTime (not 0 or None)
-                # 2. Are not older than 24 hours
-                if start_time and start_time > one_day_ago:
-                    events.append(event)
+                if not start_time:
+                    continue
+                
+                if start_time > now_timestamp:
+                    # Future events
+                    upcoming_events.append(event)
+                elif start_time > one_day_ago:
+                    # Past events (last 24h)
+                    past_events.append(event)
             
-            logger.info(f"Filtered events: {len(events)} (from {len(all_events)} total)")
+            logger.info(f"Filtered: {len(upcoming_events)} upcoming, {len(past_events)} recent past")
             
-            if not events:
-                await interaction.followup.send("📅 No upcoming events found.")
+            if not upcoming_events and not past_events:
+                await interaction.followup.send("📅 No upcoming or recent events found.")
                 return
             
             # Create embed
             embed = discord.Embed(
-                title="📅 Upcoming Raid-Helper Events",
-                description=f"Found {len(events)} upcoming event(s)",
+                title="📅 Raid-Helper Events",
                 color=discord.Color.blue(),
                 timestamp=datetime.now(timezone.utc)
             )
             
             # Sort events by start time
-            sorted_events = sorted(events, key=lambda x: x.get('startTime', 0))
+            upcoming_sorted = sorted(upcoming_events, key=lambda x: x.get('startTime', 0))
+            past_sorted = sorted(past_events, key=lambda x: x.get('startTime', 0), reverse=True)
             
-            # Add events to embed
-            for event in sorted_events[:25]:  # Discord limit: 25 fields
-                event_id = event.get('id', 'Unknown')
-                title = event.get('title', 'Untitled Event')
-                start_time = event.get('startTime', 0)
-                leader_id = event.get('leaderId', 'Unknown')
-                
-                # Format start time (API returns seconds, not milliseconds)
-                if start_time:
-                    time_str = f"<t:{start_time}:F>"
-                else:
-                    time_str = "No date set"
-                
-                # Get leader mention
-                leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
-                leader_str = leader.mention if leader else f"<@{leader_id}>"
-                
-                # Count signups
-                signups = event.get('signUps', [])
-                signup_count = len(signups)
-                
+            # Count total fields we'll add
+            total_fields = len(upcoming_sorted) + len(past_sorted)
+            
+            # Add upcoming events
+            if upcoming_sorted:
+                for idx, event in enumerate(upcoming_sorted[:15]):  # Limit to 15 upcoming
+                    event_id = event.get('id', 'Unknown')
+                    title = event.get('title', 'Untitled Event')
+                    start_time = event.get('startTime', 0)
+                    leader_id = event.get('leaderId', 'Unknown')
+                    
+                    # Format start time
+                    time_str = f"<t:{start_time}:F>" if start_time else "No date set"
+                    time_relative = f"<t:{start_time}:R>" if start_time else ""
+                    
+                    # Get leader mention
+                    leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
+                    leader_str = leader.mention if leader else f"<@{leader_id}>"
+                    
+                    # Get signup count from advanced field
+                    advanced = event.get('advanced', {})
+                    signup_count = advanced.get('signedUpUserCount', 0)
+                    
+                    field_name = f"🔜 {title}" if idx == 0 else f"🎯 {title}"
+                    
+                    embed.add_field(
+                        name=field_name,
+                        value=f"**ID**: `{event_id}`\n"
+                              f"**Start**: {time_str} ({time_relative})\n"
+                              f"**Leader**: {leader_str}\n"
+                              f"**Signups**: {signup_count}",
+                        inline=False
+                    )
+            
+            # Add separator if we have both upcoming and past events
+            if upcoming_sorted and past_sorted and (len(upcoming_sorted) + len(past_sorted)) <= 24:
                 embed.add_field(
-                    name=f"🎯 {title}",
-                    value=f"**ID**: `{event_id}`\n"
-                          f"**Start**: {time_str}\n"
-                          f"**Leader**: {leader_str}\n"
-                          f"**Signups**: {signup_count}",
+                    name="─────────────────────",
+                    value="**Recent Past Events (Last 24h)**",
                     inline=False
                 )
             
-            if len(sorted_events) > 25:
-                embed.set_footer(text=f"Showing 25 of {len(sorted_events)} events")
+            # Add past events (recent)
+            if past_sorted:
+                remaining_slots = 25 - len(upcoming_sorted) - (1 if upcoming_sorted and past_sorted else 0)
+                for event in past_sorted[:remaining_slots]:
+                    event_id = event.get('id', 'Unknown')
+                    title = event.get('title', 'Untitled Event')
+                    start_time = event.get('startTime', 0)
+                    leader_id = event.get('leaderId', 'Unknown')
+                    
+                    # Format start time
+                    time_str = f"<t:{start_time}:F>" if start_time else "No date set"
+                    time_relative = f"<t:{start_time}:R>" if start_time else ""
+                    
+                    # Get leader mention
+                    leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
+                    leader_str = leader.mention if leader else f"<@{leader_id}>"
+                    
+                    # Get signup count from advanced field
+                    advanced = event.get('advanced', {})
+                    signup_count = advanced.get('signedUpUserCount', 0)
+                    
+                    embed.add_field(
+                        name=f"⏱️ {title}",
+                        value=f"**ID**: `{event_id}`\n"
+                              f"**Start**: {time_str} ({time_relative})\n"
+                              f"**Leader**: {leader_str}\n"
+                              f"**Signups**: {signup_count}",
+                        inline=False
+                    )
+            
+            # Update description with counts
+            embed.description = f"**Upcoming**: {len(upcoming_sorted)} | **Recent Past**: {len(past_sorted)}"
+            
+            if total_fields > 25:
+                embed.set_footer(text=f"Showing 25 of {total_fields} events (limited by Discord)")
             
             await interaction.followup.send(embed=embed)
             
