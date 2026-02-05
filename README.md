@@ -66,6 +66,34 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ## 🏗️ Architecture
 
+### Deployment Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Edge-Proxy (Nginx)                     │
+│              SSL Terminierung & Reverse Proxy               │
+│                  (Separates Projekt)                        │
+└────────────┬────────────────────────────────┬───────────────┘
+             │                                │
+             │ edge-proxy network             │
+             │                                │
+      ┌──────▼──────┐                  ┌──────▼────────┐
+      │requiem-api  │                  │requiem-frontend│
+      │  (FastAPI)  │                  │    (React)     │
+      └─────────────┘                  └────────────────┘
+             │
+             │ requiem-network
+             │
+      ┌──────▼──────┐
+      │requiem-bot  │
+      │  (Discord)  │
+      └─────────────┘
+```
+
+**Netzwerke:**
+- `edge-proxy`: Externes Netzwerk für Kommunikation mit dem Reverse Proxy
+- `requiem-network`: Internes Netzwerk für Kommunikation zwischen Services
+
+### Project Structure
 ```
 Requiem_Manager/
 ├── src/
@@ -87,8 +115,9 @@ Requiem_Manager/
 │   │   ├── contexts/         # React Contexts (Auth, Theme)
 │   │   └── services/         # API Services
 │   └── package.json
-├── docker-compose.yml         # Production Containers
+├── docker-compose.prod.yml    # Production Containers
 ├── docker-compose.dev.yml     # Development Containers
+├── CLOUDFLARE_SSL_SETUP.md    # SSL Setup Guide
 ├── start.bat / start.sh       # Startup Scripts
 └── stop.bat / stop.sh         # Stop Scripts
 ```
@@ -147,9 +176,28 @@ The bot provides the following slash commands:
 ## 🐳 Docker Setup
 
 ### Production Deployment
+
+> **⚠️ WICHTIG**: Das Requiem Manager Projekt nutzt einen **separaten Edge-Proxy** für SSL-Terminierung und HTTPS.
+> 
+> **Setup-Schritte:**
+> 1. **Edge-Proxy einrichten**: Siehe Nginx Proxy Projekt (https://github.com/NiklasKy/Nginx)
+> 2. **Edge-Proxy Netzwerk erstellen**: `docker network create edge-proxy`
+> 3. **SSL-Zertifikate konfigurieren**: Siehe [CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md)
+> 4. **Requiem Manager starten**: `docker-compose -f docker-compose.prod.yml up -d --build`
+
+**Standard Deployment (mit Edge-Proxy):**
 ```bash
-docker-compose up -d
+# 1. Edge-Proxy Netzwerk erstellen (einmalig)
+docker network create edge-proxy
+
+# 2. Requiem Manager starten
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# 3. Logs checken
+docker-compose -f docker-compose.prod.yml logs -f
 ```
+
+**Für Details zur SSL-Einrichtung siehe:** [CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md)
 
 ### Development with Hot-Reload
 ```bash
@@ -158,8 +206,9 @@ docker-compose -f docker-compose.dev.yml up -d
 
 ### Containers
 - **requiem-bot**: Discord Bot Container
-- **requiem-api**: FastAPI Backend Container
-- **requiem-frontend**: React Frontend Container
+- **requiem-api**: FastAPI Backend Container (intern über `edge-proxy` Network erreichbar)
+- **requiem-frontend**: React Frontend Container (intern über `edge-proxy` Network erreichbar)
+- **edge-proxy** (separates Projekt): Nginx Reverse Proxy mit SSL-Terminierung
 
 ## 🔧 Development
 

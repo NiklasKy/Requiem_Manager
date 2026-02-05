@@ -1,5 +1,15 @@
 # 🚀 Production Deployment Guide
 
+> **⚠️ WARNUNG: VERALTET**  
+> Diese Anleitung beschreibt das **alte Deployment-Setup mit internem Nginx**.  
+> Das Requiem Manager Projekt nutzt jetzt einen **separaten Edge-Proxy** für SSL-Terminierung.
+> 
+> **Bitte verwende stattdessen:**
+> - [CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md) - Aktuelle SSL-Setup Anleitung
+> - [README.md](README.md) - Aktualisierte Deployment-Anweisungen
+
+---
+
 Complete guide for deploying Requiem Manager to a Windows Server with SSL and custom domain.
 
 ## 🏗️ Architecture Overview

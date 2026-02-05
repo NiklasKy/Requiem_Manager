@@ -1,4 +1,15 @@
 # CloudFlare SSL Setup Script for Requiem Manager
+#
+# ⚠️ WARNUNG: VERALTET
+# Dieses Skript ist für das alte Deployment-Setup mit internem Nginx.
+# Das Requiem Manager Projekt nutzt jetzt einen separaten Edge-Proxy.
+#
+# Bitte verwende stattdessen die Anleitung:
+# - CLOUDFLARE_SSL_SETUP.md - Aktuelle SSL-Setup Anleitung
+#
+# SSL-Zertifikate müssen im separaten Nginx Proxy Projekt erstellt werden:
+# F:\#Communitys\Nginx Proxy\
+#
 
 param(
     [Parameter(Mandatory=$true)]

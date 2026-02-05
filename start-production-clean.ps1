@@ -1,4 +1,17 @@
 # Requiem Manager - Production Start Script (Clean Version)
+#
+# ⚠️ WARNUNG: VERALTET
+# Dieses Skript ist für das alte Deployment-Setup mit internem Nginx.
+# Das Requiem Manager Projekt nutzt jetzt einen separaten Edge-Proxy.
+#
+# Bitte verwende stattdessen:
+# 1. Starte den Edge-Proxy im separaten Nginx Proxy Projekt
+# 2. Erstelle das edge-proxy Netzwerk: docker network create edge-proxy
+# 3. Starte Requiem Manager: docker-compose -f docker-compose.prod.yml up -d --build
+#
+# Siehe: CLOUDFLARE_SSL_SETUP.md für Details
+#
+
 param(
     [switch]$SkipSSLCheck,
     [switch]$Force,
