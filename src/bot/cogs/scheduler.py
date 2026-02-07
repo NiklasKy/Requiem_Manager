@@ -589,7 +589,7 @@ class SchedulerCog(commands.Cog):
         channel="Channel where the message should be sent",
         interval_days="Interval in days (0 = no days)",
         interval_hours="Interval in hours (0 = no hours)",
-        interval_minutes="Interval in minutes (default: 60)",
+        interval_minutes="Interval in minutes (0 = no minutes)",
         start_time="First execution in UTC (Format: YYYY-MM-DD HH:MM UTC, e.g. 2026-02-02 18:00) - Optional",
         roles="Roles to ping (select with @Role, separate multiple with space) - Sent as separate ping"
     )
@@ -600,7 +600,7 @@ class SchedulerCog(commands.Cog):
         channel: discord.TextChannel,
         interval_days: int = 0,
         interval_hours: int = 0,
-        interval_minutes: int = 60,
+        interval_minutes: int = 0,
         start_time: str = None,
         roles: str = None
     ):
