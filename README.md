@@ -146,6 +146,7 @@ The bot provides the following slash commands:
 ### 📅 Message Scheduler Commands (Administrator required)
 - `/schedule_list` - Show all scheduled messages
 - `/schedule_add` - Add a new scheduled message
+- `/schedule_edit <message_id>` - Edit an existing scheduled message
 - `/schedule_remove <message_id>` - Remove a scheduled message
 - `/schedule_toggle <message_id>` - Enable/Disable a scheduled message
 

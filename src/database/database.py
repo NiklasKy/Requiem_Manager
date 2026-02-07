@@ -137,7 +137,10 @@ class Database:
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by INTEGER,
-                last_sent TIMESTAMP
+                last_sent TIMESTAMP,
+                use_embed BOOLEAN DEFAULT FALSE,
+                embed_title TEXT,
+                embed_color INTEGER DEFAULT 3447003
             )
         """)
         
@@ -837,7 +840,10 @@ class Database:
         interval_hours: int,
         interval_minutes: int,
         role_ids: List[int],
-        next_run: datetime
+        next_run: datetime,
+        use_embed: bool = False,
+        embed_title: str = None,
+        embed_color: int = 3447003
     ) -> int:
         """Add a new scheduled message"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -846,11 +852,12 @@ class Database:
             cursor = await db.execute("""
                 INSERT INTO scheduled_messages 
                 (guild_id, name, channel_id, message, role_ids, interval_days, interval_hours, 
-                 interval_minutes, next_run, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 interval_minutes, next_run, is_active, use_embed, embed_title, embed_color)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 guild_id, name, channel_id, message, role_ids_str,
-                interval_days, interval_hours, interval_minutes, next_run, True
+                interval_days, interval_hours, interval_minutes, next_run, True,
+                use_embed, embed_title, embed_color
             ))
             
             await db.commit()
@@ -862,7 +869,8 @@ class Database:
             cursor = await db.execute("""
                 SELECT id, guild_id, name, channel_id, message, role_ids,
                        interval_days, interval_hours, interval_minutes,
-                       next_run, is_active, created_at, last_sent
+                       next_run, is_active, created_at, last_sent,
+                       use_embed, embed_title, embed_color
                 FROM scheduled_messages
                 WHERE guild_id = ?
                 ORDER BY next_run ASC
@@ -885,7 +893,10 @@ class Database:
                     'next_run': row[9],
                     'is_active': bool(row[10]),
                     'created_at': row[11],
-                    'last_sent': row[12]
+                    'last_sent': row[12],
+                    'use_embed': bool(row[13]) if row[13] is not None else False,
+                    'embed_title': row[14],
+                    'embed_color': row[15] if row[15] is not None else 3447003
                 })
             
             return messages
@@ -898,7 +909,7 @@ class Database:
             cursor = await db.execute("""
                 SELECT id, guild_id, name, channel_id, message, role_ids,
                        interval_days, interval_hours, interval_minutes,
-                       next_run, is_active
+                       next_run, is_active, use_embed, embed_title, embed_color
                 FROM scheduled_messages
                 WHERE is_active = 1 AND next_run <= ?
                 ORDER BY next_run ASC
@@ -919,7 +930,10 @@ class Database:
                     'interval_hours': row[7],
                     'interval_minutes': row[8],
                     'next_run': row[9],
-                    'is_active': bool(row[10])
+                    'is_active': bool(row[10]),
+                    'use_embed': bool(row[11]) if row[11] is not None else False,
+                    'embed_title': row[12],
+                    'embed_color': row[13] if row[13] is not None else 3447003
                 })
             
             return messages
@@ -991,6 +1005,83 @@ class Database:
             
             await db.commit()
             return new_state
+    
+    async def update_scheduled_message(
+        self,
+        message_id: int,
+        guild_id: int,
+        name: Optional[str] = None,
+        channel_id: Optional[int] = None,
+        message: Optional[str] = None,
+        interval_days: Optional[int] = None,
+        interval_hours: Optional[int] = None,
+        interval_minutes: Optional[int] = None,
+        role_ids: Optional[List[int]] = None,
+        next_run: Optional[datetime] = None
+    ) -> bool:
+        """Update a scheduled message. Only updates provided fields. Returns True if successful."""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Check if message exists
+            cursor = await db.execute("""
+                SELECT id FROM scheduled_messages
+                WHERE id = ? AND guild_id = ?
+            """, (message_id, guild_id))
+            
+            if not await cursor.fetchone():
+                return False
+            
+            # Build update query dynamically based on provided fields
+            updates = []
+            values = []
+            
+            if name is not None:
+                updates.append("name = ?")
+                values.append(name)
+            
+            if channel_id is not None:
+                updates.append("channel_id = ?")
+                values.append(channel_id)
+            
+            if message is not None:
+                updates.append("message = ?")
+                values.append(message)
+            
+            if interval_days is not None:
+                updates.append("interval_days = ?")
+                values.append(interval_days)
+            
+            if interval_hours is not None:
+                updates.append("interval_hours = ?")
+                values.append(interval_hours)
+            
+            if interval_minutes is not None:
+                updates.append("interval_minutes = ?")
+                values.append(interval_minutes)
+            
+            if role_ids is not None:
+                role_ids_str = ','.join(map(str, role_ids)) if role_ids else None
+                updates.append("role_ids = ?")
+                values.append(role_ids_str)
+            
+            if next_run is not None:
+                updates.append("next_run = ?")
+                values.append(next_run)
+            
+            if not updates:
+                return True  # Nothing to update
+            
+            # Add message_id and guild_id to values for WHERE clause
+            values.extend([message_id, guild_id])
+            
+            query = f"""
+                UPDATE scheduled_messages
+                SET {', '.join(updates)}
+                WHERE id = ? AND guild_id = ?
+            """
+            
+            await db.execute(query, values)
+            await db.commit()
+            return True
     
     async def close(self):
         """Close database connections"""

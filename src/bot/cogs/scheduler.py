@@ -67,10 +67,8 @@ class SchedulerCog(commands.Cog):
                         logger.warning(f"Channel {msg_data['channel_id']} not found for scheduled message {msg_data['id']}")
                         continue
                     
-                    # Build the message content with role pings
-                    content = msg_data['message']
-                    
-                    # Add role mentions if specified
+                    # Build role mentions if specified
+                    role_mentions_str = None
                     if msg_data['role_ids']:
                         role_ids = [int(rid) for rid in msg_data['role_ids'].split(',')]
                         mentions = []
@@ -83,10 +81,21 @@ class SchedulerCog(commands.Cog):
                                 logger.warning(f"Role {role_id} not found")
                         
                         if mentions:
-                            content = f"{' '.join(mentions)}\n\n{content}"
+                            role_mentions_str = ' '.join(mentions)
                     
-                    # Send the message
-                    await channel.send(content)
+                    # Always send as embed
+                    embed = discord.Embed(
+                        title=msg_data.get('embed_title') or msg_data['name'],
+                        description=msg_data['message'],
+                        color=msg_data.get('embed_color', 3447003)  # Default blue color
+                    )
+                    
+                    # Send with role mentions as content (for pings)
+                    if role_mentions_str:
+                        await channel.send(content=role_mentions_str, embed=embed)
+                    else:
+                        await channel.send(embed=embed)
+                    
                     logger.info(f"Sent scheduled message {msg_data['id']} to channel {channel.name}")
                     
                     # Update next run time
@@ -170,7 +179,7 @@ class SchedulerCog(commands.Cog):
                 field_value = (
                     f"**Channel:** {channel_name}\n"
                     f"**Interval:** {interval_text}\n"
-                    f"**Next Run:** {next_run_text}\n"
+                    f"**Next Run (UTC):** {next_run_text}\n"
                     f"**Roles:** {roles_text}\n"
                     f"**Message:** {message_preview}\n"
                     f"**Active:** {'✅ Yes' if msg['is_active'] else '❌ No'}"
@@ -205,16 +214,16 @@ class SchedulerCog(commands.Cog):
                 ephemeral=True
             )
     
-    @app_commands.command(name="schedule_add", description="Add a new scheduled message")
+    @app_commands.command(name="schedule_add", description="Add a new scheduled message (always sent as embed)")
     @app_commands.describe(
-        name="Name/description for this scheduled message",
+        name="Title for the embed message",
         channel="Channel where the message should be sent",
-        message="The message content to send",
+        message="The message content (supports Discord markdown formatting)",
         interval_days="Interval in days (0 = no days)",
         interval_hours="Interval in hours (0 = no hours)",
         interval_minutes="Interval in minutes (default: 60)",
-        start_time="First execution (Format: YYYY-MM-DD HH:MM, e.g. 2026-02-02 18:00) - Optional",
-        roles="Roles to ping (select with @Role, separate multiple with space)"
+        start_time="First execution in UTC (Format: YYYY-MM-DD HH:MM UTC, e.g. 2026-02-02 18:00) - Optional",
+        roles="Roles to ping (select with @Role, separate multiple with space) - Sent as separate ping"
     )
     async def schedule_add(
         self,
@@ -270,7 +279,8 @@ class SchedulerCog(commands.Cog):
                     if next_run is None:
                         await interaction.followup.send(
                             "❌ Invalid time format! Use: `YYYY-MM-DD HH:MM` (e.g. 2026-02-02 18:00)\n"
-                            "Or: `DD.MM.YYYY HH:MM` (e.g. 02.02.2026 18:00)",
+                            "Or: `DD.MM.YYYY HH:MM` (e.g. 02.02.2026 18:00)\n"
+                            "⚠️ **Important: Times must be in UTC timezone!**",
                             ephemeral=True
                         )
                         return
@@ -291,7 +301,8 @@ class SchedulerCog(commands.Cog):
                 except Exception as e:
                     await interaction.followup.send(
                         f"❌ Error parsing start time: {str(e)}\n"
-                        "Format: `YYYY-MM-DD HH:MM` (e.g. 2026-02-02 18:00)",
+                        "Format: `YYYY-MM-DD HH:MM` (e.g. 2026-02-02 18:00)\n"
+                        "⚠️ **Important: Times must be in UTC timezone!**",
                         ephemeral=True
                     )
                     return
@@ -332,7 +343,9 @@ class SchedulerCog(commands.Cog):
                 interval_hours=interval_hours,
                 interval_minutes=interval_minutes,
                 role_ids=role_ids,
-                next_run=next_run
+                next_run=next_run,
+                use_embed=True,  # Always use embed
+                embed_title=name  # Use name as embed title
             )
             
             # Build confirmation embed
@@ -354,19 +367,22 @@ class SchedulerCog(commands.Cog):
             embed.add_field(name="Name", value=name, inline=True)
             embed.add_field(name="Channel", value=channel.mention, inline=True)
             embed.add_field(name="Interval", value=interval_text, inline=True)
-            embed.add_field(name="First Run", value=f"{next_run_full}\n({next_run_text})", inline=False)
+            embed.add_field(name="First Run (UTC)", value=f"{next_run_full}\n({next_run_text})", inline=False)
             
             if role_mentions:
                 embed.add_field(
-                    name="Pinged Roles",
+                    name="Roles to Ping",
                     value=", ".join(role_mentions),
                     inline=False
                 )
             
-            embed.add_field(name="Message", value=message[:1024], inline=False)
+            embed.add_field(name="Message Preview", value=message[:1024], inline=False)
+            embed.add_field(name="Format", value="📋 Will be sent as embed with nice formatting", inline=False)
             
             if start_time:
-                embed.set_footer(text="💡 Custom start time was used")
+                embed.set_footer(text="💡 Custom start time was used (UTC timezone)")
+            else:
+                embed.set_footer(text="⏰ All times are in UTC timezone")
             
             await interaction.followup.send(embed=embed)
             
@@ -484,6 +500,219 @@ class SchedulerCog(commands.Cog):
             logger.error(f"Error in schedule_toggle: {e}")
             await interaction.followup.send(
                 f"❌ Error toggling scheduled message: {str(e)}",
+                ephemeral=True
+            )
+    
+    @app_commands.command(name="schedule_edit", description="Edit an existing scheduled message")
+    @app_commands.describe(
+        message_id="ID of the message to edit",
+        name="New name/description (leave empty to keep current)",
+        channel="New channel (leave empty to keep current)",
+        message="New message content (leave empty to keep current)",
+        interval_days="New interval in days (leave empty to keep current)",
+        interval_hours="New interval in hours (leave empty to keep current)",
+        interval_minutes="New interval in minutes (leave empty to keep current)",
+        start_time="New first execution in UTC (Format: YYYY-MM-DD HH:MM UTC) - Optional",
+        roles="New roles to ping (select with @Role) - Use 'none' to remove all roles"
+    )
+    async def schedule_edit(
+        self,
+        interaction: discord.Interaction,
+        message_id: int,
+        name: str = None,
+        channel: discord.TextChannel = None,
+        message: str = None,
+        interval_days: int = None,
+        interval_hours: int = None,
+        interval_minutes: int = None,
+        start_time: str = None,
+        roles: str = None
+    ):
+        """Edit an existing scheduled message"""
+        # Check authorization
+        if not self._has_admin_authorization(interaction.user):
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        try:
+            await interaction.response.defer()
+            
+            # Get current message to verify it exists
+            messages = await self.bot.db.get_scheduled_messages(interaction.guild_id)
+            current_msg = None
+            for msg in messages:
+                if msg['id'] == message_id:
+                    current_msg = msg
+                    break
+            
+            if not current_msg:
+                await interaction.followup.send(
+                    f"❌ Scheduled message with ID {message_id} not found!",
+                    ephemeral=True
+                )
+                return
+            
+            # Validate interval if provided
+            if interval_days is not None or interval_hours is not None or interval_minutes is not None:
+                check_days = interval_days if interval_days is not None else current_msg['interval_days']
+                check_hours = interval_hours if interval_hours is not None else current_msg['interval_hours']
+                check_minutes = interval_minutes if interval_minutes is not None else current_msg['interval_minutes']
+                
+                if check_days == 0 and check_hours == 0 and check_minutes == 0:
+                    await interaction.followup.send(
+                        "❌ The interval must be at least 1 minute!",
+                        ephemeral=True
+                    )
+                    return
+            
+            # Parse start_time if provided
+            next_run = None
+            if start_time:
+                try:
+                    formats = [
+                        "%Y-%m-%d %H:%M",
+                        "%Y-%m-%d %H:%M:%S",
+                        "%d.%m.%Y %H:%M",
+                        "%d.%m.%Y %H:%M:%S"
+                    ]
+                    
+                    for fmt in formats:
+                        try:
+                            next_run = datetime.strptime(start_time, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if next_run is None:
+                        await interaction.followup.send(
+                            "❌ Invalid time format! Use: `YYYY-MM-DD HH:MM` (e.g. 2026-02-02 18:00)\n"
+                            "Or: `DD.MM.YYYY HH:MM` (e.g. 02.02.2026 18:00)\n"
+                            "⚠️ **Important: Times must be in UTC timezone!**",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    # Check if start_time is in the past
+                    if next_run < datetime.utcnow():
+                        # Calculate intervals
+                        use_days = interval_days if interval_days is not None else current_msg['interval_days']
+                        use_hours = interval_hours if interval_hours is not None else current_msg['interval_hours']
+                        use_minutes = interval_minutes if interval_minutes is not None else current_msg['interval_minutes']
+                        
+                        total_minutes = use_days * 24 * 60 + use_hours * 60 + use_minutes
+                        minutes_delta = timedelta(minutes=total_minutes)
+                        
+                        time_diff = datetime.utcnow() - next_run
+                        intervals_to_skip = int(time_diff.total_seconds() / minutes_delta.total_seconds()) + 1
+                        next_run = next_run + (minutes_delta * intervals_to_skip)
+                        
+                        logger.info(f"Start time was in the past, adjusted to next occurrence: {next_run}")
+                    
+                except Exception as e:
+                    await interaction.followup.send(
+                        f"❌ Error parsing start time: {str(e)}\n"
+                        "Format: `YYYY-MM-DD HH:MM` (e.g. 2026-02-02 18:00)\n"
+                        "⚠️ **Important: Times must be in UTC timezone!**",
+                        ephemeral=True
+                    )
+                    return
+            
+            # Parse roles if provided
+            role_ids = None
+            if roles is not None:
+                if roles.lower() == 'none':
+                    role_ids = []
+                else:
+                    role_ids = []
+                    role_mentions = roles.split()
+                    for mention in role_mentions:
+                        if mention.startswith('<@&') and mention.endswith('>'):
+                            role_id = int(mention[3:-1])
+                            role = interaction.guild.get_role(role_id)
+                            if role:
+                                role_ids.append(role_id)
+                            else:
+                                await interaction.followup.send(
+                                    f"❌ Role with ID {role_id} not found!",
+                                    ephemeral=True
+                                )
+                                return
+            
+            # Update in database
+            success = await self.bot.db.update_scheduled_message(
+                message_id=message_id,
+                guild_id=interaction.guild_id,
+                name=name,
+                channel_id=channel.id if channel else None,
+                message=message,
+                interval_days=interval_days,
+                interval_hours=interval_hours,
+                interval_minutes=interval_minutes,
+                role_ids=role_ids,
+                next_run=next_run
+            )
+            
+            if success:
+                # Build confirmation embed
+                embed = discord.Embed(
+                    title="✅ Scheduled Message Updated",
+                    description=f"Successfully updated message ID {message_id}",
+                    color=discord.Color.green()
+                )
+                
+                # Show what was updated
+                changes = []
+                if name:
+                    changes.append(f"**Name:** {name}")
+                if channel:
+                    changes.append(f"**Channel:** {channel.mention}")
+                if message:
+                    preview = message[:100] + "..." if len(message) > 100 else message
+                    changes.append(f"**Message:** {preview}")
+                if interval_days is not None or interval_hours is not None or interval_minutes is not None:
+                    use_days = interval_days if interval_days is not None else current_msg['interval_days']
+                    use_hours = interval_hours if interval_hours is not None else current_msg['interval_hours']
+                    use_minutes = interval_minutes if interval_minutes is not None else current_msg['interval_minutes']
+                    interval_text = self._format_interval(use_minutes, use_hours, use_days)
+                    changes.append(f"**Interval:** {interval_text}")
+                if next_run:
+                    next_run_text = discord.utils.format_dt(next_run, style='F')
+                    changes.append(f"**Next Run (UTC):** {next_run_text}")
+                if role_ids is not None:
+                    if role_ids:
+                        role_mentions = []
+                        for role_id in role_ids:
+                            role = interaction.guild.get_role(role_id)
+                            if role:
+                                role_mentions.append(role.mention)
+                        changes.append(f"**Roles:** {', '.join(role_mentions)}")
+                    else:
+                        changes.append(f"**Roles:** None (removed)")
+                
+                if changes:
+                    embed.add_field(
+                        name="Updated Fields",
+                        value="\n".join(changes),
+                        inline=False
+                    )
+                
+                embed.set_footer(text="⏰ All times are in UTC timezone")
+                
+                await interaction.followup.send(embed=embed)
+                logger.info(f"Updated scheduled message {message_id} in guild {interaction.guild_id}")
+            else:
+                await interaction.followup.send(
+                    f"❌ Failed to update scheduled message!",
+                    ephemeral=True
+                )
+            
+        except Exception as e:
+            logger.error(f"Error in schedule_edit: {e}")
+            await interaction.followup.send(
+                f"❌ Error editing scheduled message: {str(e)}",
                 ephemeral=True
             )
     
