@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 import asyncio
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +14,36 @@ class SchedulerCog(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
+        
+        # Load authorized role IDs and user IDs from environment
+        self.admin_role_ids = self._parse_ids(os.getenv('ADMIN_ROLE_IDS', ''))
+        self.mod_role_ids = self._parse_ids(os.getenv('MOD_ROLE_IDS', ''))
+        self.admin_user_ids = self._parse_ids(os.getenv('ADMIN_USER_IDS', ''))
+        
+        logger.info(f"Scheduler - Admin roles: {len(self.admin_role_ids)}, Mod roles: {len(self.mod_role_ids)}, Admin users: {len(self.admin_user_ids)}")
+        
         self.check_scheduled_messages.start()
         logger.info("Scheduler Cog initialized")
+    
+    def _parse_ids(self, ids_str: str) -> set:
+        """Parse comma-separated IDs (role or user) from environment variable"""
+        if not ids_str:
+            return set()
+        try:
+            return {int(id_val.strip()) for id_val in ids_str.split(',') if id_val.strip()}
+        except ValueError as e:
+            logger.error(f"Error parsing IDs from '{ids_str}': {e}")
+            return set()
+    
+    def _has_admin_authorization(self, member: discord.Member) -> bool:
+        """Check if member has admin/moderator role OR is an admin user"""
+        # Check if user is in admin user list
+        if member.id in self.admin_user_ids:
+            return True
+        
+        # Check if user has admin or moderator role
+        member_role_ids = {role.id for role in member.roles}
+        return bool(member_role_ids & (self.admin_role_ids | self.mod_role_ids))
     
     def cog_unload(self):
         """Clean up when cog is unloaded"""
@@ -75,9 +104,16 @@ class SchedulerCog(commands.Cog):
         await self.bot.wait_until_ready()
     
     @app_commands.command(name="schedule_list", description="Show all scheduled messages")
-    @app_commands.checks.has_permissions(administrator=True)
     async def schedule_list(self, interaction: discord.Interaction):
         """List all scheduled messages"""
+        # Check authorization
+        if not self._has_admin_authorization(interaction.user):
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True
+            )
+            return
+        
         try:
             await interaction.response.defer()
             
@@ -180,7 +216,6 @@ class SchedulerCog(commands.Cog):
         start_time="First execution (Format: YYYY-MM-DD HH:MM, e.g. 2026-02-02 18:00) - Optional",
         roles="Roles to ping (select with @Role, separate multiple with space)"
     )
-    @app_commands.checks.has_permissions(administrator=True)
     async def schedule_add(
         self,
         interaction: discord.Interaction,
@@ -194,6 +229,14 @@ class SchedulerCog(commands.Cog):
         roles: str = None
     ):
         """Add a new scheduled message"""
+        # Check authorization
+        if not self._has_admin_authorization(interaction.user):
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True
+            )
+            return
+        
         try:
             await interaction.response.defer()
             
@@ -340,13 +383,20 @@ class SchedulerCog(commands.Cog):
     @app_commands.describe(
         message_id="ID of the message to remove"
     )
-    @app_commands.checks.has_permissions(administrator=True)
     async def schedule_remove(
         self,
         interaction: discord.Interaction,
         message_id: int
     ):
         """Remove a scheduled message"""
+        # Check authorization
+        if not self._has_admin_authorization(interaction.user):
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True
+            )
+            return
+        
         try:
             await interaction.response.defer()
             
@@ -393,13 +443,20 @@ class SchedulerCog(commands.Cog):
     @app_commands.describe(
         message_id="ID of the message"
     )
-    @app_commands.checks.has_permissions(administrator=True)
     async def schedule_toggle(
         self,
         interaction: discord.Interaction,
         message_id: int
     ):
         """Toggle a scheduled message active/inactive"""
+        # Check authorization
+        if not self._has_admin_authorization(interaction.user):
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True
+            )
+            return
+        
         try:
             await interaction.response.defer()
             
