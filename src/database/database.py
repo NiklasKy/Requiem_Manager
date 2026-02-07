@@ -121,6 +121,26 @@ class Database:
             )
         """)
         
+        # Scheduled messages table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                channel_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                role_ids TEXT,
+                interval_days INTEGER DEFAULT 0,
+                interval_hours INTEGER DEFAULT 0,
+                interval_minutes INTEGER DEFAULT 60,
+                next_run TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                last_sent TIMESTAMP
+            )
+        """)
+        
         # Create indexes for better performance
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_guild_members_guild ON guild_members (guild_id)")
@@ -130,6 +150,8 @@ class Database:
         await db.execute("CREATE INDEX IF NOT EXISTS idx_role_changes_role ON role_changes (role_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_roles_guild ON roles (guild_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_join_leave_events_guild ON join_leave_events (guild_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_messages_guild ON scheduled_messages (guild_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_messages_next_run ON scheduled_messages (next_run)")
     
     async def _migrate_database(self, db: aiosqlite.Connection):
         """Handle database migrations"""
@@ -802,6 +824,173 @@ class Database:
             
             await db.commit()
             logger.info(f"Cleanup completed: Removed {total_deleted} duplicate initial role entries")
+    
+    # === Scheduled Messages Functions ===
+    
+    async def add_scheduled_message(
+        self,
+        guild_id: int,
+        name: str,
+        channel_id: int,
+        message: str,
+        interval_days: int,
+        interval_hours: int,
+        interval_minutes: int,
+        role_ids: List[int],
+        next_run: datetime
+    ) -> int:
+        """Add a new scheduled message"""
+        async with aiosqlite.connect(self.db_path) as db:
+            role_ids_str = ','.join(map(str, role_ids)) if role_ids else None
+            
+            cursor = await db.execute("""
+                INSERT INTO scheduled_messages 
+                (guild_id, name, channel_id, message, role_ids, interval_days, interval_hours, 
+                 interval_minutes, next_run, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                guild_id, name, channel_id, message, role_ids_str,
+                interval_days, interval_hours, interval_minutes, next_run, True
+            ))
+            
+            await db.commit()
+            return cursor.lastrowid
+    
+    async def get_scheduled_messages(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all scheduled messages for a guild"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT id, guild_id, name, channel_id, message, role_ids,
+                       interval_days, interval_hours, interval_minutes,
+                       next_run, is_active, created_at, last_sent
+                FROM scheduled_messages
+                WHERE guild_id = ?
+                ORDER BY next_run ASC
+            """, (guild_id,))
+            
+            rows = await cursor.fetchall()
+            
+            messages = []
+            for row in rows:
+                messages.append({
+                    'id': row[0],
+                    'guild_id': row[1],
+                    'name': row[2],
+                    'channel_id': row[3],
+                    'message': row[4],
+                    'role_ids': row[5],
+                    'interval_days': row[6],
+                    'interval_hours': row[7],
+                    'interval_minutes': row[8],
+                    'next_run': row[9],
+                    'is_active': bool(row[10]),
+                    'created_at': row[11],
+                    'last_sent': row[12]
+                })
+            
+            return messages
+    
+    async def get_messages_to_send(self) -> List[Dict[str, Any]]:
+        """Get all messages that should be sent now"""
+        async with aiosqlite.connect(self.db_path) as db:
+            now = datetime.utcnow()
+            
+            cursor = await db.execute("""
+                SELECT id, guild_id, name, channel_id, message, role_ids,
+                       interval_days, interval_hours, interval_minutes,
+                       next_run, is_active
+                FROM scheduled_messages
+                WHERE is_active = 1 AND next_run <= ?
+                ORDER BY next_run ASC
+            """, (now,))
+            
+            rows = await cursor.fetchall()
+            
+            messages = []
+            for row in rows:
+                messages.append({
+                    'id': row[0],
+                    'guild_id': row[1],
+                    'name': row[2],
+                    'channel_id': row[3],
+                    'message': row[4],
+                    'role_ids': row[5],
+                    'interval_days': row[6],
+                    'interval_hours': row[7],
+                    'interval_minutes': row[8],
+                    'next_run': row[9],
+                    'is_active': bool(row[10])
+                })
+            
+            return messages
+    
+    async def update_scheduled_message_next_run(self, message_id: int):
+        """Update the next run time for a scheduled message"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get current message data
+            cursor = await db.execute("""
+                SELECT interval_days, interval_hours, interval_minutes
+                FROM scheduled_messages
+                WHERE id = ?
+            """, (message_id,))
+            
+            row = await cursor.fetchone()
+            if not row:
+                return
+            
+            interval_days, interval_hours, interval_minutes = row
+            
+            # Calculate next run time
+            next_run = datetime.utcnow() + timedelta(
+                days=interval_days,
+                hours=interval_hours,
+                minutes=interval_minutes
+            )
+            
+            # Update in database
+            await db.execute("""
+                UPDATE scheduled_messages
+                SET next_run = ?, last_sent = ?
+                WHERE id = ?
+            """, (next_run, datetime.utcnow(), message_id))
+            
+            await db.commit()
+    
+    async def remove_scheduled_message(self, message_id: int, guild_id: int) -> bool:
+        """Remove a scheduled message"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                DELETE FROM scheduled_messages
+                WHERE id = ? AND guild_id = ?
+            """, (message_id, guild_id))
+            
+            await db.commit()
+            return cursor.rowcount > 0
+    
+    async def toggle_scheduled_message(self, message_id: int, guild_id: int) -> Optional[bool]:
+        """Toggle a scheduled message active/inactive. Returns new state or None if not found."""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get current state
+            cursor = await db.execute("""
+                SELECT is_active FROM scheduled_messages
+                WHERE id = ? AND guild_id = ?
+            """, (message_id, guild_id))
+            
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            
+            new_state = not bool(row[0])
+            
+            # Update state
+            await db.execute("""
+                UPDATE scheduled_messages
+                SET is_active = ?
+                WHERE id = ? AND guild_id = ?
+            """, (new_state, message_id, guild_id))
+            
+            await db.commit()
+            return new_state
     
     async def close(self):
         """Close database connections"""

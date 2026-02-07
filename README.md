@@ -6,6 +6,7 @@ A comprehensive Discord bot system for tracking user activities with a React-bas
 
 - **Discord Bot** with Cogs architecture and Slash Commands
 - **User Tracking**: Username, nickname, and role changes
+- **Message Scheduler**: Automated recurring messages with role pings
 - **Activity Recognition**: AI-powered game screenshot analysis with OpenAI Vision
 - **SQLite Database** for persistent data storage  
 - **REST API** with FastAPI for data access
@@ -102,6 +103,8 @@ Requiem_Manager/
 │   │   └── cogs/              # Bot Commands
 │   │       ├── tracking.py    # User-Tracking Commands
 │   │       ├── admin.py       # Admin Commands
+│   │       ├── scheduler.py   # Message Scheduler
+│   │       ├── raidhelper.py  # Raid Helper
 │   │       └── activity_recognition.py  # Activity Recognition with AI
 │   ├── database/              # Database
 │   │   └── database.py        # SQLite Handler
@@ -139,6 +142,14 @@ The bot provides the following slash commands:
 - `/cleanup_old_data [days]` - Clean up old data
 - `/export_user_data <user>` - Export user data
 - `/cleanup_duplicate_roles` - Clean up duplicate initial role entries
+
+### 📅 Message Scheduler Commands (Administrator required)
+- `/schedule_list` - Show all scheduled messages
+- `/schedule_add` - Add a new scheduled message
+- `/schedule_remove <message_id>` - Remove a scheduled message
+- `/schedule_toggle <message_id>` - Enable/Disable a scheduled message
+
+> 📚 **Detailed Guide:** See [MESSAGE_SCHEDULER_GUIDE.md](MESSAGE_SCHEDULER_GUIDE.md)
 
 ## 📊 Dashboard Features
 
