@@ -1,28 +1,44 @@
 # Requiem Discord User Tracking System
 
-A comprehensive Discord bot system for tracking user activities with a React-based dashboard.
+A comprehensive Discord bot system for tracking user activities with a modern React-based dashboard, automated message scheduling, and AI-powered activity recognition.
+
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [Prerequisites](#-prerequisites)
+- [Quick Start](#-quick-start)
+- [Architecture](#️-architecture)
+- [Discord Bot Commands](#-discord-bot-commands)
+- [Dashboard Features](#-dashboard-features)
+- [Database Schema](#️-database-schema)
+- [Docker Deployment](#-docker-deployment)
+- [Development](#-development)
+- [Security](#-security)
+- [Documentation](#-documentation)
+- [Support](#-support)
 
 ## 🌟 Features
 
 - **Discord Bot** with Cogs architecture and Slash Commands
-- **User Tracking**: Username, nickname, and role changes
-- **Message Scheduler**: Automated recurring messages with role pings
-- **Activity Recognition**: AI-powered game screenshot analysis with OpenAI Vision
-- **SQLite Database** for persistent data storage  
-- **REST API** with FastAPI for data access
-- **React Dashboard** for modern data visualization
-- **Docker Containers** for easy deployment
-- **Real-time Updates** and event logging
-- **Dark/Light Mode** with glassmorphism design
+- **User Tracking**: Username, nickname, and role changes with complete history
+- **Message Scheduler**: Automated recurring messages with role pings and embed support
+- **Activity Recognition**: AI-powered game screenshot analysis using OpenAI Vision API
+- **SQLite Database** for persistent data storage with optimized indexes
+- **REST API** with FastAPI for secure data access
+- **React Dashboard** with modern glassmorphism design
+- **Docker Containers** for production-ready deployment
+- **Real-time Updates** and comprehensive event logging
+- **Dark/Light Mode** with system preference detection
 - **Discord OAuth2 Authentication** with role-based access control
 
 ## 📋 Prerequisites
 
 - Docker and Docker Compose
-- Discord Bot Token
+- Discord Bot Token ([Create Bot](https://discord.com/developers/applications))
 - Discord Guild (Server) ID
-- Discord OAuth2 Application (for authentication)
+- Discord OAuth2 Application credentials
 - OpenAI API Key (for activity recognition feature)
+- External Nginx Proxy for SSL termination (optional, for production HTTPS)
 
 ## 🚀 Quick Start
 
@@ -37,213 +53,294 @@ cd Requiem_Manager
 cp .env.example .env
 ```
 
-Edit the `.env` file and add your Discord credentials:
+Edit the `.env` file with your credentials:
 ```env
+# Discord Configuration
 DISCORD_TOKEN=your_bot_token_here
 DISCORD_GUILD_ID=your_guild_id_here
+
+# Discord OAuth2 (for Dashboard Authentication)
 DISCORD_CLIENT_ID=your_oauth_client_id_here
 DISCORD_CLIENT_SECRET=your_oauth_client_secret_here
+
+# JWT Secret (generate a strong random string)
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# OpenAI API (for Activity Recognition)
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Admin & Moderator Configuration (Discord User/Role IDs)
+ADMIN_ROLE_IDS=123456789012345678,987654321098765432
+ADMIN_USER_IDS=242292116833697792
+MOD_ROLE_IDS=123456789012345678,987654321098765432
 ```
 
 ### 3. Start System
-```bash
-# Production Mode
-./start.bat
-# or
-./start.sh
 
-# Development Mode (with Hot-Reload)
-./start.bat dev
-# or
-./start.sh dev
+**Production Mode:**
+```bash
+# Create external network (one-time setup)
+docker network create edge-proxy
+
+# Start all services
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# View logs
+docker-compose -f docker-compose.prod.yml logs -f
 ```
 
-### 4. Access
+**Development Mode** (with hot-reload):
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+### 4. Access Dashboard
 - **Frontend Dashboard**: http://localhost:3001
-- **API**: http://localhost:8000  
 - **API Documentation**: http://localhost:8000/docs
+- **API Endpoint**: http://localhost:8000
 
 ## 🏗️ Architecture
 
 ### Deployment Architecture
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Edge-Proxy (Nginx)                     │
-│              SSL Terminierung & Reverse Proxy               │
-│                  (Separates Projekt)                        │
+│                   Edge-Proxy (Nginx)                        │
+│             SSL Termination & Reverse Proxy                 │
+│                   (Separate Project)                        │
 └────────────┬────────────────────────────────┬───────────────┘
              │                                │
              │ edge-proxy network             │
              │                                │
       ┌──────▼──────┐                  ┌──────▼────────┐
-      │requiem-api  │                  │requiem-frontend│
+      │ requiem-api │                  │requiem-frontend│
       │  (FastAPI)  │                  │    (React)     │
       └─────────────┘                  └────────────────┘
              │
              │ requiem-network
              │
       ┌──────▼──────┐
-      │requiem-bot  │
+      │ requiem-bot │
       │  (Discord)  │
       └─────────────┘
 ```
 
-**Netzwerke:**
-- `edge-proxy`: Externes Netzwerk für Kommunikation mit dem Reverse Proxy
-- `requiem-network`: Internes Netzwerk für Kommunikation zwischen Services
+**Networks:**
+- `edge-proxy`: External network for communication with reverse proxy (HTTPS)
+- `requiem-network`: Internal network for inter-service communication
 
 ### Project Structure
 ```
 Requiem_Manager/
 ├── src/
-│   ├── bot/                    # Discord Bot
-│   │   ├── main.py            # Bot Main File
-│   │   └── cogs/              # Bot Commands
-│   │       ├── tracking.py    # User-Tracking Commands
-│   │       ├── admin.py       # Admin Commands
-│   │       ├── scheduler.py   # Message Scheduler
-│   │       ├── raidhelper.py  # Raid Helper
-│   │       └── activity_recognition.py  # Activity Recognition with AI
-│   ├── database/              # Database
-│   │   └── database.py        # SQLite Handler
-│   └── api/                   # REST API
-│       ├── main.py            # FastAPI Server
-│       └── auth.py            # Authentication System
-├── frontend/                  # React Dashboard
+│   ├── bot/                          # Discord Bot
+│   │   ├── main.py                   # Bot entry point
+│   │   └── cogs/                     # Bot command modules
+│   │       ├── tracking.py           # User tracking commands
+│   │       ├── admin.py              # Admin commands
+│   │       ├── scheduler.py          # Message scheduler
+│   │       ├── raidhelper.py         # Raid helper integration
+│   │       └── activity_recognition.py  # AI-powered screenshot analysis
+│   ├── database/                     # Database layer
+│   │   └── database.py               # SQLite handler with migrations
+│   └── api/                          # REST API
+│       ├── main.py                   # FastAPI server
+│       └── auth.py                   # OAuth2 & JWT authentication
+├── frontend/                         # React Dashboard
 │   ├── src/
-│   │   ├── components/        # React Components
-│   │   ├── pages/            # Dashboard Pages
-│   │   ├── contexts/         # React Contexts (Auth, Theme)
-│   │   └── services/         # API Services
+│   │   ├── components/               # Reusable React components
+│   │   ├── pages/                    # Dashboard pages
+│   │   ├── contexts/                 # React contexts (Auth, Theme)
+│   │   └── services/                 # API service layer
 │   └── package.json
-├── docker-compose.prod.yml    # Production Containers
-├── docker-compose.dev.yml     # Development Containers
-├── CLOUDFLARE_SSL_SETUP.md    # SSL Setup Guide
-├── start.bat / start.sh       # Startup Scripts
-└── stop.bat / stop.sh         # Stop Scripts
+├── docs/                             # Documentation
+│   ├── DISCORD_OAUTH_SETUP.md        # OAuth2 setup guide
+│   ├── ADMIN_CONFIGURATION.md        # Admin system configuration
+│   ├── ACTIVITY_RECOGNITION_GUIDE.md # Activity recognition setup
+│   ├── MESSAGE_SCHEDULER_GUIDE.md    # Message scheduler usage
+│   ├── CLOUDFLARE_SSL_SETUP.md       # SSL certificate setup
+│   └── ...
+├── docker-compose.prod.yml           # Production containers
+├── docker-compose.dev.yml            # Development containers
+├── Dockerfile.bot                    # Bot container definition
+├── Dockerfile.api                    # API container definition
+├── Dockerfile.frontend               # Frontend container definition
+├── requirements.txt                  # Python dependencies
+└── .env.example                      # Environment variables template
 ```
 
 ## 🤖 Discord Bot Commands
 
-The bot provides the following slash commands:
-
 ### User Commands
-- `/user_stats [user]` - Show statistics for a user
-- `/recent_changes [limit]` - Show recent changes  
-- `/role_history <user>` - Role history of a user
-- `/server_stats` - Show server statistics
-- `/analyze_activity <image1> [image2-5]` - Analyze game activity screenshots to extract member names and weekly activity points
+- `/user_stats [user]` - Display statistics for a specific user
+- `/recent_changes [limit]` - Show recent username/nickname changes
+- `/role_history <user>` - View complete role change history for a user
+- `/server_stats` - Display comprehensive server statistics
+- `/analyze_activity <image1> [image2-5]` - Analyze game activity screenshots to extract member names and weekly activity points using AI
 
-### Admin Commands (Administrator required)
-- `/sync` - Synchronize slash commands
-- `/database_stats` - Database statistics
-- `/cleanup_old_data [days]` - Clean up old data
-- `/export_user_data <user>` - Export user data
-- `/cleanup_duplicate_roles` - Clean up duplicate initial role entries
+### Admin Commands
+*Requires Administrator permissions or configured Admin/Mod roles*
 
-### 📅 Message Scheduler Commands (Administrator required)
-- `/schedule_list` - Show all scheduled messages
-- `/schedule_add` - Add a new scheduled message
+- `/sync` - Synchronize slash commands with Discord
+- `/database_stats` - View database statistics and health metrics
+- `/cleanup_old_data [days]` - Remove data older than specified days
+- `/export_user_data <user>` - Export complete data for a specific user
+- `/cleanup_duplicate_roles` - Remove duplicate initial role entries
+
+### Message Scheduler Commands
+*Requires Administrator permissions or configured Admin/Mod roles*
+
+- `/schedule_list` - List all scheduled messages with status
+- `/schedule_add` - Create a new scheduled message with interval and role pings
 - `/schedule_edit <message_id>` - Edit an existing scheduled message
-- `/schedule_remove <message_id>` - Remove a scheduled message
-- `/schedule_toggle <message_id>` - Enable/Disable a scheduled message
+- `/schedule_remove <message_id>` - Delete a scheduled message
+- `/schedule_toggle <message_id>` - Enable or disable a scheduled message
 
-> 📚 **Detailed Guide:** See [MESSAGE_SCHEDULER_GUIDE.md](MESSAGE_SCHEDULER_GUIDE.md)
+📚 **Detailed Guide:** See [Message Scheduler Documentation](docs/MESSAGE_SCHEDULER_GUIDE.md)
 
 ## 📊 Dashboard Features
 
-### Dashboard Pages
-- **Main Dashboard**: Server overview and activities with modern glassmorphism design
-- **User List**: All users with search functionality and role filtering
-- **User Details**: Detailed user statistics and role history
-- **Recent Changes**: Username/nickname change log
-- **Admin Panel**: System status and database statistics
+### Available Pages
+- **Main Dashboard**: Server overview with real-time statistics and glassmorphism design
+- **User List**: Browse all users with search functionality and role filtering
+- **User Details**: Detailed user profile with statistics and complete history
+- **Recent Changes**: Comprehensive log of username and nickname changes
+- **Admin Panel**: System status, database statistics, and management tools
 
 ### Authentication & Security
-- **Discord OAuth2** authentication
-- **Role-based access control** with configurable admin roles
-- **JWT tokens** for session management
-- **Protected routes** and admin-only sections
+- **Discord OAuth2** integration for secure login
+- **Role-based access control** with configurable admin and moderator roles
+- **JWT tokens** for secure session management
+- **Protected routes** with automatic permission checks
+- **Refresh token** support for seamless sessions
 
 ### Tracked Events
-- User joins/leaves server
-- Username changes  
-- Nickname changes
-- Role changes (added/removed)
-- Initial inventory of existing members
+- User joins and leaves server
+- Username changes with timestamps
+- Nickname changes with before/after values
+- Role additions and removals with complete history
+- Initial inventory of all existing guild members
+
+### Design Features
+- **Modern Glassmorphism UI** with backdrop blur effects
+- **Dark/Light mode** with automatic system preference detection
+- **Discord-inspired color palette** for familiar user experience
+- **Smooth animations** and hover effects
+- **Responsive design** for desktop, tablet, and mobile
+- **Interactive user cards** with dynamic role displays
+- **Professional data visualization** with charts and graphs
 
 ## 🗄️ Database Schema
 
-### Tables
-- `users` - User basic data
-- `guild_members` - Guild-specific user data
-- `roles` - Role information with colors
-- `username_changes` - Username change history
-- `nickname_changes` - Nickname change history  
-- `role_changes` - Role change history
-- `join_leave_events` - Join/leave events
+### Core Tables
+- `users` - User basic information (ID, username, avatar)
+- `guild_members` - Guild-specific member data
+- `roles` - Role information with colors and positions
+- `username_changes` - Complete username change history
+- `nickname_changes` - Nickname change tracking
+- `role_changes` - Role addition and removal events
+- `join_leave_events` - Server join and leave tracking
+- `scheduled_messages` - Automated message scheduling data
 
-## 🐳 Docker Setup
+**Features:**
+- Optimized with indexes for fast queries
+- Automatic schema migrations
+- Support for data cleanup and archiving
+- Foreign key constraints for data integrity
+
+## 🐳 Docker Deployment
 
 ### Production Deployment
 
-> **⚠️ WICHTIG**: Das Requiem Manager Projekt nutzt einen **separaten Edge-Proxy** für SSL-Terminierung und HTTPS.
-> 
-> **Setup-Schritte:**
-> 1. **Edge-Proxy einrichten**: Siehe Nginx Proxy Projekt (https://github.com/NiklasKy/Nginx)
-> 2. **Edge-Proxy Netzwerk erstellen**: `docker network create edge-proxy`
-> 3. **SSL-Zertifikate konfigurieren**: Siehe [CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md)
-> 4. **Requiem Manager starten**: `docker-compose -f docker-compose.prod.yml up -d --build`
+> **⚠️ IMPORTANT**: The Requiem Manager project uses a **separate Edge-Proxy** for SSL termination and HTTPS routing.
 
-**Standard Deployment (mit Edge-Proxy):**
+**Setup Steps:**
+1. **Set up Edge-Proxy**: See [Nginx Proxy Project](https://github.com/NiklasKy/Nginx)
+2. **Create Edge-Proxy Network**: `docker network create edge-proxy`
+3. **Configure SSL Certificates**: Follow [Cloudflare SSL Setup Guide](docs/CLOUDFLARE_SSL_SETUP.md)
+4. **Start Requiem Manager**: `docker-compose -f docker-compose.prod.yml up -d --build`
+
+**Standard Deployment:**
 ```bash
-# 1. Edge-Proxy Netzwerk erstellen (einmalig)
+# 1. Create edge-proxy network (one-time setup)
 docker network create edge-proxy
 
-# 2. Requiem Manager starten
+# 2. Start all services
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# 3. Logs checken
+# 3. Check logs
 docker-compose -f docker-compose.prod.yml logs -f
+
+# 4. Check service status
+docker-compose -f docker-compose.prod.yml ps
 ```
 
-**Für Details zur SSL-Einrichtung siehe:** [CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md)
+**For SSL setup details, see:** [Cloudflare SSL Setup Guide](docs/CLOUDFLARE_SSL_SETUP.md)
 
-### Development with Hot-Reload
+### Development Deployment
+
+**Hot-Reload Development Mode:**
 ```bash
+# Start development environment
 docker-compose -f docker-compose.dev.yml up -d
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.dev.yml down
 ```
 
-### Containers
-- **requiem-bot**: Discord Bot Container
-- **requiem-api**: FastAPI Backend Container (intern über `edge-proxy` Network erreichbar)
-- **requiem-frontend**: React Frontend Container (intern über `edge-proxy` Network erreichbar)
-- **edge-proxy** (separates Projekt): Nginx Reverse Proxy mit SSL-Terminierung
+### Container Services
+- **requiem-bot**: Discord bot with automatic restart
+- **requiem-api**: FastAPI backend accessible via `edge-proxy` network
+- **requiem-frontend**: React frontend served via `edge-proxy` network
+
+### Health Checks
+All containers include health checks for monitoring:
+```bash
+# Check container health
+docker ps
+
+# View detailed health status
+docker inspect --format='{{json .State.Health}}' requiem-bot
+```
 
 ## 🔧 Development
 
-### Local Development
+### Local Development (without Docker)
+
+**Backend Setup:**
 ```bash
-# Install Python Dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Start Bot locally
+# Start Discord Bot
 python -m src.bot.main
 
-# Start API locally  
+# Start API Server (in separate terminal)
 python -m src.api.main
-
-# Start Frontend locally
-cd frontend
-npm install
-npm start
 ```
 
-### Environment Variables
+**Frontend Setup:**
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Start development server
+npm start
+
+# Build for production
+npm run build
+```
+
+### Environment Configuration
+
+**Complete Environment Variables:**
 ```env
-# Discord Configuration
+# Discord Bot Configuration
 DISCORD_TOKEN=your_discord_bot_token_here
 DISCORD_GUILD_ID=your_guild_id_here
 
@@ -255,17 +352,17 @@ DISCORD_REDIRECT_URI=http://localhost:3001/auth/callback
 # JWT Configuration
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 
-# Admin Configuration
+# Admin Configuration (comma-separated IDs)
 ADMIN_ROLE_IDS=123456789012345678,987654321098765432
 ADMIN_USER_IDS=242292116833697792
 
-# Moderator Configuration
+# Moderator Configuration (comma-separated IDs)
 MOD_ROLE_IDS=123456789012345678,987654321098765432
 
-# OpenAI Configuration
+# OpenAI Configuration (for Activity Recognition)
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Database Configuration  
+# Database Configuration
 DATABASE_PATH=./data/tracking.db
 
 # API Configuration
@@ -278,99 +375,170 @@ REACT_APP_DEFAULT_GUILD_ID=your_guild_id_here
 REACT_APP_DISCORD_CLIENT_ID=your_oauth_client_id_here
 ```
 
-## 📝 Logs
+### Logging
 
-Logs are automatically written to the `logs/` folder:
+Logs are automatically written to the `logs/` directory:
+
 ```bash
-# View Container Logs
-docker-compose logs -f
+# View all container logs
+docker-compose -f docker-compose.prod.yml logs -f
 
-# Specific Service Logs
-docker-compose logs -f bot
-docker-compose logs -f api
-docker-compose logs -f frontend
+# View specific service logs
+docker-compose -f docker-compose.prod.yml logs -f bot
+docker-compose -f docker-compose.prod.yml logs -f api
+docker-compose -f docker-compose.prod.yml logs -f frontend
+
+# View last 100 lines
+docker-compose -f docker-compose.prod.yml logs --tail=100 bot
 ```
 
 ## 🛠️ Troubleshooting
 
-### Bot Won't Start
-- Check Discord token
-- Check bot permissions (Privileged Gateway Intents)
-- Set correct Guild ID
+### Bot Issues
+**Bot won't start:**
+- Verify Discord token is correct
+- Check bot has required Privileged Gateway Intents enabled:
+  - Server Members Intent
+  - Message Content Intent (if using message commands)
+- Confirm Guild ID is correct
+- Check container logs: `docker-compose logs bot`
 
-### API Not Reachable
-- Is port 8000 available?
+**Commands not showing:**
+- Use `/sync` command to synchronize slash commands
+- Wait a few minutes for Discord to propagate commands
+- Check bot has `applications.commands` scope in OAuth2 URL
+
+### API Issues
+**API not reachable:**
+- Verify port 8000 is not in use by another application
 - Check container status: `docker ps`
-- Check API logs: `docker-compose logs api`
+- View API logs: `docker-compose logs api`
+- Test health endpoint: `curl http://localhost:8000/health`
 
-### Frontend Won't Load
-- Check API connection
-- Check CORS settings
-- Check frontend logs: `docker-compose logs frontend`
+**CORS errors:**
+- Verify `REACT_APP_API_URL` matches API URL
+- Check API CORS configuration in `src/api/main.py`
+- Ensure frontend and API are on same domain/port in production
 
-### Authentication Issues
-- Check Discord OAuth2 configuration
-- Verify redirect URIs match exactly
-- Check JWT secret is set
-- Ensure user is member of configured guild
+### Frontend Issues
+**Dashboard won't load:**
+- Check API is running and accessible
+- Verify `REACT_APP_API_URL` is correctly set
+- Check browser console for errors
+- View frontend logs: `docker-compose logs frontend`
 
-### Database Problems
-- Check data folder permissions
-- Verify SQLite file created: `ls -la data/`
-- Check database logs
+**Authentication fails:**
+- Verify Discord OAuth2 credentials are correct
+- Check redirect URI matches exactly (including protocol and port)
+- Ensure `JWT_SECRET` is set and consistent
+- Confirm user is a member of the configured guild
+- Clear browser cookies and retry
+
+### Database Issues
+**Database errors:**
+- Check `data/` folder exists and has correct permissions
+- Verify SQLite file is created: `ls -la data/`
+- Check database logs in container logs
+- Try manual database check: `sqlite3 data/tracking.db ".schema"`
+
+**Migration failures:**
+- Database migrations run automatically on startup
+- Check bot logs for migration errors
+- Backup database before manual intervention
+- Contact support with error logs
 
 ## 📈 Performance
 
-- SQLite optimized with indexes
-- Automatic data cleanup via Admin Panel
-- Container Health Checks
-- Efficient API endpoints with pagination
-- Modern React optimizations (useCallback, useMemo)
+- **Optimized SQLite** with indexes on frequently queried columns
+- **Automatic cleanup** of old data via Admin Panel
+- **Container health checks** for automatic restart on failure
+- **Efficient API endpoints** with pagination support
+- **React optimizations** using useCallback, useMemo, and lazy loading
+- **Caching strategies** for frequently accessed data
+- **Connection pooling** for database operations
 
 ## 🔒 Security
 
-- Bot token only via Environment Variables
-- API CORS protection
-- Admin commands only for administrators
-- Discord OAuth2 authentication
-- JWT token security with expiration
-- Role-based access control
-- Container with non-root user (recommended for production)
-
-## 🎨 Design Features
-
-- **Modern Glassmorphism UI** with blur effects
-- **Dark/Light mode** with system preference detection
-- **Discord-inspired color palette**
-- **Smooth animations** and hover effects
-- **Responsive design** for all screen sizes
-- **Interactive user cards** with role displays
-- **Professional data visualization** with charts
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push branch (`git push origin feature/amazing-feature`)
-5. Create Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
-
-## 🆘 Support
-
-For problems or questions:
-1. Use GitHub Issues
-2. Provide logs and error messages
-3. Include environment and Docker version
+- **Environment variables** for all sensitive credentials (no hardcoded secrets)
+- **JWT authentication** with token expiration and refresh
+- **API CORS protection** with configurable origins
+- **Role-based access control** for admin features
+- **Discord OAuth2** for secure user authentication
+- **SQL injection protection** through parameterized queries
+- **Container security** with non-root users (recommended for production)
+- **Rate limiting** on API endpoints (configurable)
+- **Input validation** on all user inputs
 
 ## 📚 Documentation
 
-- [Discord OAuth2 Setup Guide](DISCORD_OAUTH_SETUP.md)
-- [Admin Configuration Guide](ADMIN_CONFIGURATION.md)
-- [Activity Recognition Guide](ACTIVITY_RECOGNITION_GUIDE.md) - AI-powered screenshot analysis
+Comprehensive guides available in the `docs/` folder:
+
+### Setup Guides
+- [Discord OAuth2 Setup Guide](docs/DISCORD_OAUTH_SETUP.md) - Complete OAuth2 configuration
+- [Admin Configuration Guide](docs/ADMIN_CONFIGURATION.md) - Configure admin and moderator roles
+- [Cloudflare SSL Setup Guide](docs/CLOUDFLARE_SSL_SETUP.md) - Production HTTPS setup
+
+### Feature Guides
+- [Activity Recognition Guide](docs/ACTIVITY_RECOGNITION_GUIDE.md) - AI-powered screenshot analysis setup
+- [Message Scheduler Guide](docs/MESSAGE_SCHEDULER_GUIDE.md) - Automated message scheduling usage
+- [Message Scheduler Changelog](docs/SCHEDULER_CHANGELOG.md) - Feature history and updates
+
+### Advanced Documentation
+- [Production Deployment Guide](docs/PRODUCTION_DEPLOYMENT.md) - Detailed production setup (outdated, use this README)
+- [Scheduler Test Guide](docs/SCHEDULER_TEST_GUIDE.md) - Testing message scheduler functionality
+- [Activity Recognition Changelog](docs/CHANGELOG_ACTIVITY_RECOGNITION.md) - Feature updates and changes
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+**Code Guidelines:**
+- Follow PEP 8 for Python code
+- Use ESLint configuration for JavaScript/React
+- Include docstrings for all functions
+- Add tests for new features
+- Update documentation as needed
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+Having issues or questions?
+
+1. **Check Documentation**: Review relevant guides in the `docs/` folder
+2. **Search Issues**: Look for similar problems in [GitHub Issues](https://github.com/your-repo/issues)
+3. **Create New Issue**: If not found, open a new issue with:
+   - Detailed description of the problem
+   - Steps to reproduce
+   - Error messages and logs
+   - Environment details (OS, Docker version, etc.)
+4. **Provide Logs**: Always include relevant logs from affected services
+
+**Quick Debug Commands:**
+```bash
+# Check all service status
+docker-compose -f docker-compose.prod.yml ps
+
+# View all logs
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Check specific service
+docker-compose -f docker-compose.prod.yml logs bot --tail=50
+
+# Restart all services
+docker-compose -f docker-compose.prod.yml restart
+
+# Rebuild specific service
+docker-compose -f docker-compose.prod.yml up -d --build bot
+```
 
 ---
 
