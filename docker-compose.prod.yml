@@ -1,5 +1,8 @@
 version: '3.8'
 
+# Uses .env file in the project root
+# Make sure .env exists with all required variables
+
 services:
   # Discord Bot
   bot:

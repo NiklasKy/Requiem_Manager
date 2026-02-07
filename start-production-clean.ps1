@@ -64,16 +64,16 @@ if (-not (Test-DockerRunning)) {
 }
 Write-ColorMessage "[SUCCESS] Docker is running" "Green"
 
-# Check .env.production
-if (-not (Test-Path ".env.production")) {
-    Write-ColorMessage "[ERROR] .env.production file not found!" "Red"
-    Write-ColorMessage "Please create .env.production with your configuration." "White"
+# Check .env
+if (-not (Test-Path ".env")) {
+    Write-ColorMessage "[ERROR] .env file not found!" "Red"
+    Write-ColorMessage "Please create .env with your configuration." "White"
     
     if (Test-Path ".env.example") {
-        $create = Read-Host "Copy .env.example to .env.production? (y/N)"
+        $create = Read-Host "Copy .env.example to .env? (y/N)"
         if ($create -eq 'y') {
-            Copy-Item ".env.example" ".env.production"
-            Write-ColorMessage "[SUCCESS] Created .env.production" "Green"
+            Copy-Item ".env.example" ".env"
+            Write-ColorMessage "[SUCCESS] Created .env" "Green"
             Write-ColorMessage "Please edit it with your values and run again." "Yellow"
         }
     }
@@ -83,7 +83,7 @@ if (-not (Test-Path ".env.production")) {
 
 # Load environment
 Write-ColorMessage "[INFO] Loading environment..." "Yellow"
-$env = Get-EnvFile ".env.production"
+$env = Get-EnvFile ".env"
 
 # Validate required variables
 $required = @("DOMAIN", "DISCORD_TOKEN", "JWT_SECRET")
