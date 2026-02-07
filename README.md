@@ -488,23 +488,6 @@ Comprehensive guides available in the `docs/` folder:
 - [Scheduler Test Guide](docs/SCHEDULER_TEST_GUIDE.md) - Testing message scheduler functionality
 - [Activity Recognition Changelog](docs/CHANGELOG_ACTIVITY_RECOGNITION.md) - Feature updates and changes
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-**Code Guidelines:**
-- Follow PEP 8 for Python code
-- Use ESLint configuration for JavaScript/React
-- Include docstrings for all functions
-- Add tests for new features
-- Update documentation as needed
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
