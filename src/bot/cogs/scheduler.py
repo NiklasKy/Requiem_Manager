@@ -344,7 +344,6 @@ class SchedulerCog(commands.Cog):
                 interval_minutes=interval_minutes,
                 role_ids=role_ids,
                 next_run=next_run,
-                use_embed=True,  # Always use embed
                 embed_title=name  # Use name as embed title
             )
             

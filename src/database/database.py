@@ -138,7 +138,6 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by INTEGER,
                 last_sent TIMESTAMP,
-                use_embed BOOLEAN DEFAULT FALSE,
                 embed_title TEXT,
                 embed_color INTEGER DEFAULT 3447003
             )
@@ -226,6 +225,31 @@ class Database:
             await db.execute("CREATE INDEX IF NOT EXISTS idx_roles_guild ON roles (guild_id)")
             
             logger.info("Migration completed: roles table created and data migrated")
+        
+        # Migration: Add embed columns to scheduled_messages table
+        cursor = await db.execute("PRAGMA table_info(scheduled_messages)")
+        columns = await cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        # Remove use_embed column if it exists (we always use embeds now)
+        if 'use_embed' in column_names:
+            logger.info("Removing use_embed column (always using embeds now)...")
+            # SQLite doesn't support DROP COLUMN easily, but since we always use embeds, we can just ignore it
+        
+        if 'embed_title' not in column_names:
+            logger.info("Adding embed_title column to scheduled_messages table...")
+            await db.execute("ALTER TABLE scheduled_messages ADD COLUMN embed_title TEXT")
+            # Set embed_title to name for existing messages
+            await db.execute("UPDATE scheduled_messages SET embed_title = name WHERE embed_title IS NULL")
+            logger.info("Added embed_title column")
+        
+        if 'embed_color' not in column_names:
+            await db.execute("ALTER TABLE scheduled_messages ADD COLUMN embed_color INTEGER DEFAULT 3447003")
+            # Set default blue color for existing messages
+            await db.execute("UPDATE scheduled_messages SET embed_color = 3447003 WHERE embed_color IS NULL")
+            logger.info("Added embed_color column")
+            
+        logger.info("Database migration completed successfully")
     
     async def upsert_role(self, role: discord.Role):
         """Insert or update role information"""
@@ -841,23 +865,22 @@ class Database:
         interval_minutes: int,
         role_ids: List[int],
         next_run: datetime,
-        use_embed: bool = False,
         embed_title: str = None,
         embed_color: int = 3447003
     ) -> int:
-        """Add a new scheduled message"""
+        """Add a new scheduled message (always sent as embed)"""
         async with aiosqlite.connect(self.db_path) as db:
             role_ids_str = ','.join(map(str, role_ids)) if role_ids else None
             
             cursor = await db.execute("""
                 INSERT INTO scheduled_messages 
                 (guild_id, name, channel_id, message, role_ids, interval_days, interval_hours, 
-                 interval_minutes, next_run, is_active, use_embed, embed_title, embed_color)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 interval_minutes, next_run, is_active, embed_title, embed_color)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 guild_id, name, channel_id, message, role_ids_str,
                 interval_days, interval_hours, interval_minutes, next_run, True,
-                use_embed, embed_title, embed_color
+                embed_title or name, embed_color
             ))
             
             await db.commit()
@@ -870,7 +893,7 @@ class Database:
                 SELECT id, guild_id, name, channel_id, message, role_ids,
                        interval_days, interval_hours, interval_minutes,
                        next_run, is_active, created_at, last_sent,
-                       use_embed, embed_title, embed_color
+                       embed_title, embed_color
                 FROM scheduled_messages
                 WHERE guild_id = ?
                 ORDER BY next_run ASC
@@ -894,22 +917,21 @@ class Database:
                     'is_active': bool(row[10]),
                     'created_at': row[11],
                     'last_sent': row[12],
-                    'use_embed': bool(row[13]) if row[13] is not None else False,
-                    'embed_title': row[14],
-                    'embed_color': row[15] if row[15] is not None else 3447003
+                    'embed_title': row[13] or row[2],  # Fallback to name if no title
+                    'embed_color': row[14] if row[14] is not None else 3447003
                 })
             
             return messages
     
     async def get_messages_to_send(self) -> List[Dict[str, Any]]:
-        """Get all messages that should be sent now"""
+        """Get all messages that should be sent now (always sent as embeds)"""
         async with aiosqlite.connect(self.db_path) as db:
             now = datetime.utcnow()
             
             cursor = await db.execute("""
                 SELECT id, guild_id, name, channel_id, message, role_ids,
                        interval_days, interval_hours, interval_minutes,
-                       next_run, is_active, use_embed, embed_title, embed_color
+                       next_run, is_active, embed_title, embed_color
                 FROM scheduled_messages
                 WHERE is_active = 1 AND next_run <= ?
                 ORDER BY next_run ASC
@@ -931,9 +953,8 @@ class Database:
                     'interval_minutes': row[8],
                     'next_run': row[9],
                     'is_active': bool(row[10]),
-                    'use_embed': bool(row[11]) if row[11] is not None else False,
-                    'embed_title': row[12],
-                    'embed_color': row[13] if row[13] is not None else 3447003
+                    'embed_title': row[11] or row[2],  # Fallback to name if no title
+                    'embed_color': row[12] if row[12] is not None else 3447003
                 })
             
             return messages
