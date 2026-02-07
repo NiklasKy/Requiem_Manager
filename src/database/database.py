@@ -889,21 +889,39 @@ class Database:
     async def get_scheduled_messages(self, guild_id: int) -> List[Dict[str, Any]]:
         """Get all scheduled messages for a guild"""
         async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute("""
-                SELECT id, guild_id, name, channel_id, message, role_ids,
-                       interval_days, interval_hours, interval_minutes,
-                       next_run, is_active, created_at, last_sent,
-                       embed_title, embed_color
-                FROM scheduled_messages
-                WHERE guild_id = ?
-                ORDER BY next_run ASC
-            """, (guild_id,))
+            # Check which columns exist
+            cursor = await db.execute("PRAGMA table_info(scheduled_messages)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
             
+            # Build SELECT based on available columns
+            if 'embed_title' in column_names and 'embed_color' in column_names:
+                query = """
+                    SELECT id, guild_id, name, channel_id, message, role_ids,
+                           interval_days, interval_hours, interval_minutes,
+                           next_run, is_active, created_at, last_sent,
+                           embed_title, embed_color
+                    FROM scheduled_messages
+                    WHERE guild_id = ?
+                    ORDER BY next_run ASC
+                """
+            else:
+                # Fallback for old schema
+                query = """
+                    SELECT id, guild_id, name, channel_id, message, role_ids,
+                           interval_days, interval_hours, interval_minutes,
+                           next_run, is_active, created_at, last_sent
+                    FROM scheduled_messages
+                    WHERE guild_id = ?
+                    ORDER BY next_run ASC
+                """
+            
+            cursor = await db.execute(query, (guild_id,))
             rows = await cursor.fetchall()
             
             messages = []
             for row in rows:
-                messages.append({
+                msg = {
                     'id': row[0],
                     'guild_id': row[1],
                     'name': row[2],
@@ -916,10 +934,18 @@ class Database:
                     'next_run': row[9],
                     'is_active': bool(row[10]),
                     'created_at': row[11],
-                    'last_sent': row[12],
-                    'embed_title': row[13] or row[2],  # Fallback to name if no title
-                    'embed_color': row[14] if row[14] is not None else 3447003
-                })
+                    'last_sent': row[12]
+                }
+                
+                # Add embed fields if they exist
+                if len(row) > 13:
+                    msg['embed_title'] = row[13] or row[2]  # Fallback to name
+                    msg['embed_color'] = row[14] if row[14] is not None else 3447003
+                else:
+                    msg['embed_title'] = row[2]  # Use name as title
+                    msg['embed_color'] = 3447003
+                
+                messages.append(msg)
             
             return messages
     
@@ -928,20 +954,38 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             now = datetime.utcnow()
             
-            cursor = await db.execute("""
-                SELECT id, guild_id, name, channel_id, message, role_ids,
-                       interval_days, interval_hours, interval_minutes,
-                       next_run, is_active, embed_title, embed_color
-                FROM scheduled_messages
-                WHERE is_active = 1 AND next_run <= ?
-                ORDER BY next_run ASC
-            """, (now,))
+            # Check which columns exist
+            cursor = await db.execute("PRAGMA table_info(scheduled_messages)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
             
+            # Build SELECT based on available columns
+            if 'embed_title' in column_names and 'embed_color' in column_names:
+                query = """
+                    SELECT id, guild_id, name, channel_id, message, role_ids,
+                           interval_days, interval_hours, interval_minutes,
+                           next_run, is_active, embed_title, embed_color
+                    FROM scheduled_messages
+                    WHERE is_active = 1 AND next_run <= ?
+                    ORDER BY next_run ASC
+                """
+            else:
+                # Fallback for old schema
+                query = """
+                    SELECT id, guild_id, name, channel_id, message, role_ids,
+                           interval_days, interval_hours, interval_minutes,
+                           next_run, is_active
+                    FROM scheduled_messages
+                    WHERE is_active = 1 AND next_run <= ?
+                    ORDER BY next_run ASC
+                """
+            
+            cursor = await db.execute(query, (now,))
             rows = await cursor.fetchall()
             
             messages = []
             for row in rows:
-                messages.append({
+                msg = {
                     'id': row[0],
                     'guild_id': row[1],
                     'name': row[2],
@@ -952,10 +996,18 @@ class Database:
                     'interval_hours': row[7],
                     'interval_minutes': row[8],
                     'next_run': row[9],
-                    'is_active': bool(row[10]),
-                    'embed_title': row[11] or row[2],  # Fallback to name if no title
-                    'embed_color': row[12] if row[12] is not None else 3447003
-                })
+                    'is_active': bool(row[10])
+                }
+                
+                # Add embed fields if they exist
+                if len(row) > 11:
+                    msg['embed_title'] = row[11] or row[2]  # Fallback to name
+                    msg['embed_color'] = row[12] if row[12] is not None else 3447003
+                else:
+                    msg['embed_title'] = row[2]  # Use name as title
+                    msg['embed_color'] = 3447003
+                
+                messages.append(msg)
             
             return messages
     
