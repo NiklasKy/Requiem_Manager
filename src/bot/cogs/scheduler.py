@@ -15,7 +15,7 @@ class ScheduleAddModal(discord.ui.Modal, title="Add Scheduled Message"):
     message = discord.ui.TextInput(
         label="Message Content",
         style=discord.TextStyle.paragraph,
-        placeholder="Enter your message here...\nYou can use multiple lines!\n\n**Markdown** is supported:\n- **Bold**\n- *Italic*\n- Emojis: 🎉",
+        placeholder="Enter your message here...\nSupports **Markdown** formatting and emojis! 🎉",
         required=True,
         max_length=2000
     )
@@ -186,7 +186,7 @@ class ScheduleEditModal(discord.ui.Modal, title="Edit Scheduled Message"):
     message = discord.ui.TextInput(
         label="Message Content (leave empty to keep current)",
         style=discord.TextStyle.paragraph,
-        placeholder="Enter your new message here...\nYou can use multiple lines!\n\n**Markdown** is supported:\n- **Bold**\n- *Italic*\n- Emojis: 🎉\n\nLeave empty to keep current message.",
+        placeholder="Enter new message...\nSupports **Markdown** and emojis! Leave empty to keep current.",
         required=False,
         max_length=2000
     )
@@ -207,8 +207,8 @@ class ScheduleEditModal(discord.ui.Modal, title="Edit Scheduled Message"):
         self.roles = roles
         
         # Pre-fill with current message
-        if current_message:
-            self.message.default = current_message
+        if current_message and 'message' in current_message:
+            self.message.default = current_message['message']
     
     async def on_submit(self, interaction: discord.Interaction):
         """Called when the modal is submitted"""
