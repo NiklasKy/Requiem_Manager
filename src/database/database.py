@@ -1014,9 +1014,9 @@ class Database:
     async def update_scheduled_message_next_run(self, message_id: int):
         """Update the next run time for a scheduled message"""
         async with aiosqlite.connect(self.db_path) as db:
-            # Get current message data
+            # Get current message data including the current next_run time
             cursor = await db.execute("""
-                SELECT interval_days, interval_hours, interval_minutes
+                SELECT interval_days, interval_hours, interval_minutes, next_run
                 FROM scheduled_messages
                 WHERE id = ?
             """, (message_id,))
@@ -1025,10 +1025,23 @@ class Database:
             if not row:
                 return
             
-            interval_days, interval_hours, interval_minutes = row
+            interval_days, interval_hours, interval_minutes, current_next_run = row
             
-            # Calculate next run time
-            next_run = datetime.utcnow() + timedelta(
+            # Parse current next_run time
+            try:
+                if isinstance(current_next_run, str):
+                    current_next_run = datetime.strptime(current_next_run, "%Y-%m-%d %H:%M:%S.%f")
+                elif isinstance(current_next_run, datetime):
+                    pass  # Already a datetime object
+                else:
+                    # Fallback to current time if parsing fails
+                    current_next_run = datetime.utcnow()
+            except (ValueError, TypeError):
+                current_next_run = datetime.utcnow()
+            
+            # Calculate next run time FROM THE SCHEDULED TIME (not from now)
+            # This prevents time drift
+            next_run = current_next_run + timedelta(
                 days=interval_days,
                 hours=interval_hours,
                 minutes=interval_minutes
