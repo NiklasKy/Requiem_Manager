@@ -22,11 +22,11 @@ class RaidHelperCog(commands.Cog):
             logger.warning("DISCORD_GUILD_ID not configured. Raid-Helper commands will not work.")
     
     async def get_raid_helper_events(self):
-        """Get all events from Raid-Helper API"""
+        """Get all events from Raid-Helper API v4"""
         if not self.api_key or not self.server_id:
             raise ValueError("Raid-Helper API not configured")
         
-        url = f"https://raid-helper.dev/api/v3/servers/{self.server_id}/events"
+        url = f"https://raid-helper.xyz/api/v4/servers/{self.server_id}/events"
         headers = {
             "Authorization": self.api_key,
             "Content-Type": "application/json"
@@ -40,29 +40,32 @@ class RaidHelperCog(commands.Cog):
                     raise Exception(f"Raid-Helper API returned status {response.status}")
                 
                 data = await response.json()
-                return data.get('postedEvents', [])
+                logger.info(f"Raid-Helper API v4 server events response keys: {list(data.keys()) if isinstance(data, dict) else 'list'}")
+                # v4 may return 'postedEvents' or a direct list
+                if isinstance(data, list):
+                    return data
+                return data.get('postedEvents', data.get('events', []))
     
-    async def get_event_signups_v2(self, event_id: str):
-        """Get signups for a specific event using API v2 (which returns ALL signups)"""
-        if not self.api_key:
-            raise ValueError("Raid-Helper API not configured")
-        
-        # Use API v2 for getting event details with ALL signups
-        url = f"https://raid-helper.dev/api/v2/events/{event_id}"
+    async def get_event_details(self, event_id: str):
+        """Get full details for a specific event using API v4 (returns ALL signups, no auth required)"""
+        # v4 single event endpoint does not require authorization
+        url = f"https://raid-helper.xyz/api/v4/events/{event_id}"
         headers = {
-            "Authorization": self.api_key,
             "Content-Type": "application/json"
         }
+        # Still send API key if available, doesn't hurt
+        if self.api_key:
+            headers["Authorization"] = self.api_key
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"Raid-Helper API v2 error: {response.status} - {error_text}")
-                    raise Exception(f"Raid-Helper API v2 returned status {response.status}")
+                    logger.error(f"Raid-Helper API v4 error: {response.status} - {error_text}")
+                    raise Exception(f"Raid-Helper API v4 returned status {response.status}")
                 
                 data = await response.json()
-                logger.info(f"Successfully fetched event data from API v2")
+                logger.info(f"Successfully fetched event data from API v4")
                 return data
     
     @app_commands.command(
@@ -144,18 +147,9 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count from advanced field (API v3)
-                    # Note: signUps array in v3 only contains YOUR OWN signups, so we use signedUpUserCount
+                    # Get signup count from advanced field (API v4)
                     advanced = event.get('advanced', {})
-                    signup_count = advanced.get('signedUpUserCount', 0)
-                    
-                    # Debug logging for first event
-                    if idx == 0:
-                        logger.info(f"DEBUG - Event '{title}' (ID: {event_id})")
-                        logger.info(f"  - Has 'advanced' field: {bool(advanced)}")
-                        logger.info(f"  - Advanced keys: {list(advanced.keys()) if advanced else 'None'}")
-                        logger.info(f"  - signedUpUserCount: {signup_count}")
-                        logger.info(f"  - All event keys: {list(event.keys())}")
+                    signup_count = advanced.get('signedUpUserCount', event.get('signUpCount', 0))
                     
                     field_name = f"🔜 {title}" if idx == 0 else f"🎯 {title}"
                     
@@ -193,10 +187,9 @@ class RaidHelperCog(commands.Cog):
                     leader = interaction.guild.get_member(int(leader_id)) if leader_id != 'Unknown' else None
                     leader_str = leader.mention if leader else f"<@{leader_id}>"
                     
-                    # Get signup count from advanced field (API v3)
-                    # Note: signUps array in v3 only contains YOUR OWN signups, so we use signedUpUserCount
+                    # Get signup count from advanced field (API v4)
                     advanced = event.get('advanced', {})
-                    signup_count = advanced.get('signedUpUserCount', 0)
+                    signup_count = advanced.get('signedUpUserCount', event.get('signUpCount', 0))
                     
                     embed.add_field(
                         name=f"⏱️ {title}",
@@ -255,8 +248,8 @@ class RaidHelperCog(commands.Cog):
                 )
                 return
             
-            # Get event data from API v2 (which returns ALL signups, not just yours)
-            event_data = await self.get_event_signups_v2(event_id)
+            # Get event data from API v4 (returns ALL signups)
+            event_data = await self.get_event_details(event_id)
             
             # Extract event info
             event_title = event_data.get('title', 'Unknown Event')
@@ -265,7 +258,7 @@ class RaidHelperCog(commands.Cog):
             role_members = role.members
             role_member_ids = {str(member.id): member for member in role_members}
             
-            # API v2 structure: signUps array contains ALL signups
+            # API v4 structure: signUps array contains ALL signups
             signups = event_data.get('signUps', [])
             
             logger.info(f"Found {len(signups)} total signups for event '{event_title}'")
