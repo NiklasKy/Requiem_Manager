@@ -20,10 +20,6 @@ logging.basicConfig(
     ]
 )
 
-# Temporary: enable DEBUG for voice to diagnose connection issues
-logging.getLogger('discord.voice_state').setLevel(logging.DEBUG)
-logging.getLogger('discord.voice_client').setLevel(logging.DEBUG)
-
 logger = logging.getLogger(__name__)
 
 class RequiemBot(commands.Bot):
