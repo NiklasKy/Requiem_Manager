@@ -127,11 +127,10 @@ class SoundBotCog(commands.Cog):
     async def _jungle_loop(self, guild: discord.Guild) -> None:
         """
         Main jungle loop:
-          1. Join CH1, play intro sound (once).
+          1. Play intro sound in CH1, then in CH2 (welcome round).
           2. Wait interval seconds.
-          3. Play loop sound in channel_a, immediately switch to channel_b and play.
-          4. Wait interval seconds.
-          5. Swap channel_a / channel_b and go to 3.
+          3. Play loop sound in CH1, then immediately in CH2.
+          4. Go to 2.
         """
         channel_1: discord.VoiceChannel | None = guild.get_channel(self.channel_1_id)
         channel_2: discord.VoiceChannel | None = (
@@ -143,36 +142,30 @@ class SoundBotCog(commands.Cog):
             return
 
         try:
-            # --- Initial intro ---
+            # --- Initial welcome round: play intro in both channels ---
             logger.info("Jungle: playing intro in CH1")
             await self._connect_and_play(channel_1, self.intro_file)
 
-            # --- Alternating loop ---
-            channel_a = channel_1
-            channel_b = channel_2
+            if channel_2 is not None:
+                logger.info("Jungle: playing intro in CH2")
+                await self._connect_and_play(channel_2, self.intro_file)
 
+            # --- Repeating loop: always CH1 → CH2 ---
             while True:
                 await asyncio.sleep(self.interval)
 
-                logger.info(f"Jungle: playing loop sound in {channel_a.name}")
-                await self._connect_and_play(channel_a, self.loop_file)
+                logger.info(f"Jungle: playing loop sound in CH1 ({channel_1.name})")
+                await self._connect_and_play(channel_1, self.loop_file)
 
-                if channel_b is not None:
-                    logger.info(f"Jungle: immediately switching to {channel_b.name}")
-                    await self._connect_and_play(channel_b, self.loop_file)
-                    # Swap for next cycle
-                    channel_a, channel_b = channel_b, channel_a
+                if channel_2 is not None:
+                    logger.info(f"Jungle: playing loop sound in CH2 ({channel_2.name})")
+                    await self._connect_and_play(channel_2, self.loop_file)
 
         except asyncio.CancelledError:
             logger.info(f"Jungle loop cancelled for guild {guild.name}")
-            # Disconnect if still in a voice channel
-            for vc in guild.voice_channels:
-                for member in vc.members:
-                    if member.id == self.bot.user.id:
-                        client = guild.voice_client
-                        if client and client.is_connected():
-                            await client.disconnect()
-                        break
+            client = guild.voice_client
+            if client and client.is_connected():
+                await client.disconnect()
         except Exception as e:
             logger.error(f"Unexpected error in jungle loop for guild {guild.name}: {e}")
             self._active_tasks.pop(guild.id, None)
