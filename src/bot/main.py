@@ -52,7 +52,8 @@ class RequiemBot(commands.Bot):
             'src.bot.cogs.admin',
             'src.bot.cogs.activity_recognition',
             'src.bot.cogs.raidhelper',
-            'src.bot.cogs.scheduler'
+            'src.bot.cogs.scheduler',
+            'src.bot.cogs.soundbot',
         ]
         
         for cog in cogs_to_load:
