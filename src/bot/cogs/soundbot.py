@@ -15,6 +15,14 @@ class SoundBotCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+        # Load libopus (required for voice)
+        if not discord.opus.is_loaded():
+            try:
+                discord.opus.load_opus("libopus.so.0")
+                logger.info("libopus loaded successfully")
+            except Exception as e:
+                logger.warning(f"Could not load libopus: {e} — voice may not work")
+
         # Channel IDs from environment
         self.channel_1_id = self._parse_int_env("JUNGLE_CHANNEL_1_ID")
         self.channel_2_id = self._parse_int_env("JUNGLE_CHANNEL_2_ID")
@@ -68,27 +76,47 @@ class SoundBotCog(commands.Cog):
 
     async def _play_and_wait(self, voice_client: discord.VoiceClient, filepath: str) -> None:
         """Play an audio file and block until playback is complete."""
+        if not voice_client.is_connected():
+            logger.error("Cannot play audio: bot is not connected to a voice channel")
+            return
+
         if not os.path.isfile(filepath):
             logger.error(f"Sound file not found: {filepath}")
             return
 
         source = discord.FFmpegPCMAudio(filepath)
         voice_client.play(source)
+        logger.info(f"Playing: {filepath}")
 
-        while voice_client.is_playing():
+        while voice_client.is_playing() and voice_client.is_connected():
             await asyncio.sleep(0.5)
+
+        logger.info(f"Finished playing: {filepath}")
 
     async def _connect_and_play(self, channel: discord.VoiceChannel, filepath: str) -> None:
         """Join a voice channel, play a file, then disconnect."""
         voice_client: discord.VoiceClient | None = None
         try:
-            voice_client = await channel.connect()
+            logger.info(f"Attempting to connect to voice channel: {channel.name} ({channel.id})")
+            voice_client = await asyncio.wait_for(
+                channel.connect(timeout=30.0, reconnect=False),
+                timeout=35.0
+            )
+            if not voice_client.is_connected():
+                logger.error(f"connect() returned but voice_client is not connected for {channel.name}")
+                return
             logger.info(f"Joined voice channel: {channel.name} ({channel.id})")
             await self._play_and_wait(voice_client, filepath)
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Timed out connecting to voice channel {channel.name} ({channel.id}). "
+                "Check that the bot has Connect + Speak permissions and that UDP traffic "
+                "is not blocked in your Docker/firewall setup."
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error(f"Error playing in channel {channel.name}: {e}")
+            logger.error(f"Error playing in channel {channel.name}: {e}", exc_info=True)
         finally:
             if voice_client and voice_client.is_connected():
                 await voice_client.disconnect()
