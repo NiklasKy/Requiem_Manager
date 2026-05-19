@@ -11,10 +11,6 @@ services:
       dockerfile: Dockerfile.bot
     container_name: requiem-bot
     restart: unless-stopped
-    # network_mode: host is required for Discord voice (UDP) to work in Docker.
-    # Docker's NAT blocks the UDP stream used for voice audio.
-    # The bot only needs internet access and the shared data volume — no inter-container networking needed.
-    network_mode: host
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
@@ -33,6 +29,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    networks:
+      - requiem-network
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import discord'"]
       interval: 30s
