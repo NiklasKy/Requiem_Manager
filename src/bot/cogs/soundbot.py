@@ -15,13 +15,13 @@ class SoundBotCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Load libopus (required for voice)
+        # Try to load libopus as fallback (not required when using FFmpegOpusAudio)
         if not discord.opus.is_loaded():
             try:
                 discord.opus.load_opus("libopus.so.0")
                 logger.info("libopus loaded successfully")
             except Exception as e:
-                logger.warning(f"Could not load libopus: {e} — voice may not work")
+                logger.info(f"libopus not loaded via explicit call ({e}) — using FFmpegOpusAudio (no libopus needed)")
 
         # Channel IDs from environment
         self.channel_1_id = self._parse_int_env("JUNGLE_CHANNEL_1_ID")
@@ -75,7 +75,8 @@ class SoundBotCog(commands.Cog):
         return bool(member_role_ids & (self.admin_role_ids | self.mod_role_ids))
 
     async def _play_and_wait(self, voice_client: discord.VoiceClient, filepath: str) -> None:
-        """Play an audio file and block until playback is complete."""
+        """Play an audio file and block until playback is complete.
+        Uses FFmpegOpusAudio so libopus does not need to be loaded separately."""
         if not voice_client.is_connected():
             logger.error("Cannot play audio: bot is not connected to a voice channel")
             return
@@ -84,7 +85,8 @@ class SoundBotCog(commands.Cog):
             logger.error(f"Sound file not found: {filepath}")
             return
 
-        source = discord.FFmpegPCMAudio(filepath)
+        # FFmpegOpusAudio encodes to opus via ffmpeg directly — no libopus needed
+        source = await discord.FFmpegOpusAudio.from_probe(filepath)
         voice_client.play(source)
         logger.info(f"Playing: {filepath}")
 
