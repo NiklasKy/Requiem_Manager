@@ -151,8 +151,15 @@ class SoundBotCog(commands.Cog):
                 await self._connect_and_play(channel_2, self.intro_file)
 
             # --- Repeating loop: always CH1 → CH2 ---
+            # Track the cycle start so playback time doesn't accumulate into the interval.
+            next_cycle = asyncio.get_event_loop().time() + self.interval
             while True:
-                await asyncio.sleep(self.interval)
+                # Sleep until the next scheduled cycle start
+                sleep_time = max(0.0, next_cycle - asyncio.get_event_loop().time())
+                logger.info(f"Jungle: next cycle in {sleep_time:.1f}s")
+                await asyncio.sleep(sleep_time)
+
+                cycle_start = asyncio.get_event_loop().time()
 
                 logger.info(f"Jungle: playing loop sound in CH1 ({channel_1.name})")
                 await self._connect_and_play(channel_1, self.loop_file)
@@ -160,6 +167,11 @@ class SoundBotCog(commands.Cog):
                 if channel_2 is not None:
                     logger.info(f"Jungle: playing loop sound in CH2 ({channel_2.name})")
                     await self._connect_and_play(channel_2, self.loop_file)
+
+                elapsed = asyncio.get_event_loop().time() - cycle_start
+                logger.info(f"Jungle: cycle took {elapsed:.1f}s, scheduling next in {self.interval}s")
+                # Schedule next cycle relative to this cycle's start, not its end
+                next_cycle = cycle_start + self.interval
 
         except asyncio.CancelledError:
             logger.info(f"Jungle loop cancelled for guild {guild.name}")
