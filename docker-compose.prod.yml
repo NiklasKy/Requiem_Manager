@@ -86,7 +86,7 @@ services:
       dockerfile: Dockerfile.prod
       network: host
       args:
-        - REACT_APP_API_URL=https://${DOMAIN}/api
+        - REACT_APP_API_URL=https://${DOMAIN}
         - REACT_APP_DEFAULT_GUILD_ID=${DISCORD_GUILD_ID}
         - REACT_APP_DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
         - GENERATE_SOURCEMAP=false

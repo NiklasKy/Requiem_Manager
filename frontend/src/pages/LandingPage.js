@@ -323,7 +323,7 @@ const LandingPage = () => {
               variant="outlined"
               size="large"
               component="a"
-              href="https://discord.gg/requiem"
+              href="https://discord.gg/requiem-community"
               target="_blank"
               rel="noopener noreferrer"
               sx={{
@@ -516,7 +516,7 @@ const LandingPage = () => {
         <Button
           variant="contained"
           component="a"
-          href="https://discord.gg/requiem"
+          href="https://discord.gg/requiem-community"
           target="_blank"
           rel="noopener noreferrer"
           sx={{
