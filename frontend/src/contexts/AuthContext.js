@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const validateToken = async () => {
@@ -63,27 +64,46 @@ export const AuthProvider = ({ children }) => {
   const startDiscordLogin = () => {
     const clientId = process.env.REACT_APP_DISCORD_CLIENT_ID;
     const redirectUri = `${window.location.origin}/auth/callback`;
-    const guildId = process.env.REACT_APP_DEFAULT_GUILD_ID;
-    
+
     if (!clientId) {
       console.error('Discord Client ID not configured');
       return;
     }
 
+    // Generate a cryptographic nonce to prevent Login CSRF (OAuth state parameter)
+    const stateNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    sessionStorage.setItem('oauth_state', stateNonce);
+
     const scope = 'identify guilds';
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${guildId}`;
-    
+    const discordAuthUrl = [
+      'https://discord.com/api/oauth2/authorize',
+      `?client_id=${encodeURIComponent(clientId)}`,
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`,
+      '&response_type=code',
+      `&scope=${encodeURIComponent(scope)}`,
+      `&state=${encodeURIComponent(stateNonce)}`,
+    ].join('');
+
     window.location.href = discordAuthUrl;
   };
 
   const handleDiscordCallback = async (code, state) => {
+    // Validate the returned state matches what we stored before the redirect
+    const storedState = sessionStorage.getItem('oauth_state');
+    sessionStorage.removeItem('oauth_state');
+
+    if (!storedState || state !== storedState) {
+      console.error('OAuth state mismatch — possible Login CSRF attack');
+      return false;
+    }
+
     try {
       setLoading(true);
       const response = await fetch('/api/auth/discord/callback', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, state }),
       });
 
@@ -112,8 +132,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isAdmin = () => {
-    // Use the is_admin flag from the backend instead of checking individual roles
     return user?.is_admin || false;
+  };
+
+  const hasWebsiteAccess = () => {
+    return user?.has_website_access || false;
   };
 
   const value = {
@@ -123,6 +146,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     hasRole,
     isAdmin,
+    hasWebsiteAccess,
     login,
     logout,
     startDiscordLogin,

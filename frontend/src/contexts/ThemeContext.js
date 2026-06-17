@@ -28,12 +28,12 @@ export const ThemeProvider = ({ children }) => {
     palette: {
       mode: 'light',
       primary: {
-        main: '#5865f2', // Discord Blurple
-        light: '#7289da',
-        dark: '#4752c4',
+        main: '#c0392b', // Requiem Crimson
+        light: '#e74c3c',
+        dark: '#8b0000',
       },
       secondary: {
-        main: '#43b581', // Discord Green
+        main: '#43b581',
         light: '#5dbf89',
         dark: '#3ca374',
       },
@@ -48,16 +48,10 @@ export const ThemeProvider = ({ children }) => {
       divider: '#e3e5e8',
     },
     typography: {
-      fontFamily: '"Whitney", "Helvetica Neue", "Helvetica", "Arial", sans-serif',
-      h4: {
-        fontWeight: 600,
-      },
-      h5: {
-        fontWeight: 600,
-      },
-      h6: {
-        fontWeight: 600,
-      },
+      fontFamily: '"Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif',
+      h4: { fontWeight: 600 },
+      h5: { fontWeight: 600 },
+      h6: { fontWeight: 600 },
     },
     components: {
       MuiCard: {
@@ -66,19 +60,13 @@ export const ThemeProvider = ({ children }) => {
             boxShadow: '0 2px 10px 0 rgba(0,0,0,0.1)',
             borderRadius: 8,
             transition: 'box-shadow 0.2s ease-in-out',
-            '&:hover': {
-              boxShadow: '0 4px 20px 0 rgba(0,0,0,0.15)',
-            },
+            '&:hover': { boxShadow: '0 4px 20px 0 rgba(0,0,0,0.15)' },
           },
         },
       },
       MuiButton: {
         styleOverrides: {
-          root: {
-            textTransform: 'none',
-            borderRadius: 4,
-            fontWeight: 500,
-          },
+          root: { textTransform: 'none', borderRadius: 4, fontWeight: 500 },
         },
       },
     },
@@ -87,52 +75,21 @@ export const ThemeProvider = ({ children }) => {
   const darkTheme = createTheme({
     palette: {
       mode: 'dark',
-      primary: {
-        main: '#5865f2', // Discord Blurple
-        light: '#7289da',
-        dark: '#4752c4',
-      },
-      secondary: {
-        main: '#43b581', // Discord Green
-        light: '#5dbf89',
-        dark: '#3ca374',
-      },
-      background: {
-        default: '#36393f', // Discord Dark Gray
-        paper: '#2f3136', // Discord Darker Gray
-      },
-      text: {
-        primary: '#dcddde', // Discord Light Text
-        secondary: '#b9bbbe', // Discord Secondary Text
-      },
-      divider: '#4f545c', // Discord Border
-      error: {
-        main: '#ed4245', // Discord Red
-      },
-      warning: {
-        main: '#faa61a', // Discord Yellow
-      },
-      info: {
-        main: '#5865f2', // Discord Blurple
-      },
-      success: {
-        main: '#43b581', // Discord Green
-      },
+      primary:    { main: '#c0392b', light: '#e74c3c', dark: '#8b0000' },
+      secondary:  { main: '#43b581', light: '#5dbf89', dark: '#3ca374' },
+      background: { default: '#08080f', paper: '#100a0a' },
+      text:       { primary: '#dcddde', secondary: '#b9bbbe' },
+      divider:    '#2a1515',
+      error:      { main: '#ed4245' },
+      warning:    { main: '#faa61a' },
+      info:       { main: '#c0392b' },
+      success:    { main: '#43b581' },
     },
     typography: {
-      fontFamily: '"Whitney", "Helvetica Neue", "Helvetica", "Arial", sans-serif',
-      h4: {
-        fontWeight: 600,
-        color: '#ffffff',
-      },
-      h5: {
-        fontWeight: 600,
-        color: '#ffffff',
-      },
-      h6: {
-        fontWeight: 600,
-        color: '#ffffff',
-      },
+      fontFamily: '"Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif',
+      h4: { fontWeight: 600, color: '#ffffff' },
+      h5: { fontWeight: 600, color: '#ffffff' },
+      h6: { fontWeight: 600, color: '#ffffff' },
     },
     components: {
       MuiCard: {
@@ -169,10 +126,10 @@ export const ThemeProvider = ({ children }) => {
           root: {
             '& .MuiOutlinedInput-root': {
               '& fieldset': {
-                borderColor: '#4f545c',
+                borderColor: '#2a1515',
               },
               '&:hover fieldset': {
-                borderColor: '#5865f2',
+                borderColor: '#c0392b',
               },
             },
           },
@@ -181,10 +138,10 @@ export const ThemeProvider = ({ children }) => {
       MuiChip: {
         styleOverrides: {
           root: {
-            backgroundColor: '#4f545c',
+            backgroundColor: '#2a1515',
             color: '#dcddde',
             '&:hover': {
-              backgroundColor: '#5865f2',
+              backgroundColor: '#c0392b',
             },
           },
         },

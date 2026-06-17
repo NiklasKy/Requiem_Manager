@@ -124,3 +124,6 @@ ssl-data/
 # stuff
 Todo.txt
 quickguide.txt
+skills-lock.json
+.cursor
+Cursor.md

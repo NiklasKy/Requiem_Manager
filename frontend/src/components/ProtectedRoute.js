@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
 const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, loading, isAdmin } = useAuth();
+  const { isAuthenticated, loading, isAdmin, hasWebsiteAccess } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -26,8 +26,11 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
   }
 
   if (!isAuthenticated()) {
-    // Redirect to login page with return URL
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (!hasWebsiteAccess()) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   if (requireAdmin && !isAdmin()) {

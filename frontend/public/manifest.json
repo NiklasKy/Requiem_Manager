@@ -1,6 +1,6 @@
 {
-  "short_name": "Requiem Tracking",
-  "name": "Requiem User Tracking Dashboard",
+  "short_name": "Requiem",
+  "name": "Requiem — Community Hub",
   "icons": [
     {
       "src": "icons/favicon.png",
@@ -8,13 +8,13 @@
       "type": "image/png"
     },
     {
-      "src": "icons/favicon.png",
+      "src": "icons/Requiem-logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#5865f2",
-  "background_color": "#1a1a1a"
+  "theme_color": "#c0392b",
+  "background_color": "#08080f"
 }

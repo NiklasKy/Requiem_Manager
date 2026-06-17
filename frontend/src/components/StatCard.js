@@ -1,141 +1,106 @@
 import React from 'react';
-import { Box, Typography, useTheme, alpha, keyframes } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import useThemeColors from '../hooks/useThemeColors';
 
-const glow = keyframes`
-  0%, 100% { 
-    box-shadow: 0 4px 20px rgba(88, 101, 242, 0.3);
-  }
-  50% { 
-    box-shadow: 0 6px 30px rgba(88, 101, 242, 0.5);
-  }
-`;
-
-const float = keyframes`
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-5px); }
-`;
+const COLOR_MAP = {
+  primary:   { main: '#c0392b', gradient: 'linear-gradient(135deg, #c0392b 0%, #e74c3c 100%)', shadow: 'rgba(192,57,43,0.4)' },
+  secondary: { main: '#9c27b0', gradient: 'linear-gradient(135deg, #9c27b0 0%, #ba68c8 100%)', shadow: 'rgba(156,39,176,0.4)' },
+  success:   { main: '#4caf50', gradient: 'linear-gradient(135deg, #4caf50 0%, #66bb6a 100%)', shadow: 'rgba(76,175,80,0.4)' },
+  warning:   { main: '#ff9800', gradient: 'linear-gradient(135deg, #ff9800 0%, #ffb74d 100%)', shadow: 'rgba(255,152,0,0.4)' },
+  error:     { main: '#f44336', gradient: 'linear-gradient(135deg, #f44336 0%, #ef5350 100%)', shadow: 'rgba(244,67,54,0.4)' },
+  info:      { main: '#2196f3', gradient: 'linear-gradient(135deg, #2196f3 0%, #42a5f5 100%)', shadow: 'rgba(33,150,243,0.4)' },
+};
 
 const StatCard = ({ title, value, icon, color = 'primary' }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  
-  const getColorConfig = (colorName) => {
-    const colors = {
-      primary: { main: '#5865f2', gradient: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)', shadow: 'rgba(88, 101, 242, 0.4)' },
-      secondary: { main: '#9c27b0', gradient: 'linear-gradient(135deg, #9c27b0 0%, #ba68c8 100%)', shadow: 'rgba(156, 39, 176, 0.4)' },
-      success: { main: '#4caf50', gradient: 'linear-gradient(135deg, #4caf50 0%, #66bb6a 100%)', shadow: 'rgba(76, 175, 80, 0.4)' },
-      warning: { main: '#ff9800', gradient: 'linear-gradient(135deg, #ff9800 0%, #ffb74d 100%)', shadow: 'rgba(255, 152, 0, 0.4)' },
-      error: { main: '#f44336', gradient: 'linear-gradient(135deg, #f44336 0%, #ef5350 100%)', shadow: 'rgba(244, 67, 54, 0.4)' },
-      info: { main: '#2196f3', gradient: 'linear-gradient(135deg, #2196f3 0%, #42a5f5 100%)', shadow: 'rgba(33, 150, 243, 0.4)' },
-    };
-    return colors[colorName] || colors.primary;
-  };
-
-  const colorConfig = getColorConfig(color);
+  const { cardBg, cardBorder, textSecondary } = useThemeColors();
+  const cfg = COLOR_MAP[color] || COLOR_MAP.primary;
 
   return (
     <Box
       sx={{
         height: '100%',
         position: 'relative',
-        background: isDark
-          ? alpha('#1a1a1a', 0.8)
-          : alpha('#ffffff', 0.25),
+        background: cardBg,
         backdropFilter: 'blur(20px)',
-        border: `1px solid ${alpha(isDark ? '#ffffff' : '#ffffff', 0.2)}`,
+        border: `1px solid ${cardBorder}`,
         borderRadius: 4,
         overflow: 'hidden',
-        transition: 'all 0.3s ease',
-        cursor: 'pointer',
+        transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
         '&:hover': {
-          transform: 'translateY(-8px)',
-          boxShadow: `0 12px 40px ${colorConfig.shadow}`,
-          border: `1px solid ${alpha(colorConfig.main, 0.4)}`,
-          '& .stat-icon': {
-            animation: `${float} 2s ease-in-out infinite`,
-          },
-          '& .stat-value': {
-            color: colorConfig.main,
-          }
+          transform: 'translateY(-4px)',
+          boxShadow: `0 10px 32px ${cfg.shadow}`,
+          borderColor: cfg.main,
+          '& .stat-shimmer': { transform: 'translateX(100%)' },
+          '& .stat-icon': { transform: 'scale(1.08)' },
         },
-        '&::before': {
-          content: '""',
+        '& .stat-shimmer': {
           position: 'absolute',
-          top: 0,
-          left: '-100%',
-          width: '100%',
-          height: '100%',
-          background: `linear-gradient(90deg, transparent, ${alpha('#ffffff', 0.1)}, transparent)`,
-          transition: 'left 0.5s',
+          inset: 0,
+          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 1,
+          transform: 'translateX(-100%)',
+          transition: 'transform 0.55s ease',
         },
-        '&:hover::before': {
-          left: '100%',
-        }
       }}
     >
-      <Box sx={{ p: 3, height: '100%' }}>
-        <Box display="flex" alignItems="center" justifyContent="space-between" height="100%">
+      <span className="stat-shimmer" />
+      <Box sx={{ p: 3, position: 'relative', zIndex: 2 }}>
+        <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box flex={1}>
-            <Typography 
-              variant="body2" 
-              gutterBottom
-              sx={{ 
-                color: alpha('#ffffff', 0.7),
+            <Typography
+              variant="body2"
+              sx={{
+                color: textSecondary,
                 fontWeight: 500,
-                fontSize: '0.9rem',
-                mb: 2,
+                fontSize: '0.85rem',
                 textTransform: 'uppercase',
-                letterSpacing: '0.5px'
+                letterSpacing: '0.5px',
+                mb: 1.5,
               }}
             >
               {title}
             </Typography>
-            <Typography 
-              variant="h3" 
-              component="div"
+            <Typography
+              variant="h3"
               className="stat-value"
               sx={{
-                color: alpha('#ffffff', 0.95),
                 fontWeight: 700,
-                fontSize: '2.5rem',
+                fontSize: '2.25rem',
                 lineHeight: 1,
-                transition: 'color 0.3s ease',
-                background: colorConfig.gradient,
+                transition: 'color 0.25s ease',
+                background: cfg.gradient,
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              {value?.toLocaleString() || '0'}
+              {value?.toLocaleString() ?? '0'}
             </Typography>
           </Box>
-          
+
           {icon && (
-            <Box 
+            <Box
               className="stat-icon"
-              sx={{ 
+              sx={{
                 ml: 2,
-                p: 2,
+                p: 1.75,
                 borderRadius: '50%',
-                background: colorConfig.gradient,
+                background: cfg.gradient,
                 color: 'white',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: `0 4px 15px ${colorConfig.shadow}`,
-                transition: 'all 0.3s ease',
-                '& svg': {
-                  fontSize: '1.8rem',
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
-                }
+                boxShadow: `0 4px 14px ${cfg.shadow}`,
+                transition: 'transform 0.25s ease',
+                '& svg': { fontSize: '1.6rem' },
               }}
             >
               {icon}
             </Box>
           )}
         </Box>
-        
-        {/* Bottom accent line */}
+
         <Box
           sx={{
             position: 'absolute',
@@ -143,8 +108,8 @@ const StatCard = ({ title, value, icon, color = 'primary' }) => {
             left: 0,
             right: 0,
             height: 3,
-            background: colorConfig.gradient,
-            opacity: 0.8,
+            background: cfg.gradient,
+            opacity: 0.7,
           }}
         />
       </Box>

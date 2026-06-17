@@ -183,6 +183,35 @@ class RequiemBot(commands.Bot):
             await self.db.log_username_change(before, after)
             logger.info(f"Logged username change for {after.id}: {before.name} -> {after.name}")
 
+    async def on_message(self, message):
+        """Capture announcement-channel messages as news posts."""
+        if message.author.bot:
+            await self.process_commands(message)
+            return
+        news_channel_id = os.getenv("NEWS_CHANNEL_ID")
+        if not news_channel_id:
+            await self.process_commands(message)
+            return
+        if str(message.channel.id) != news_channel_id.strip():
+            await self.process_commands(message)
+            return
+        if self.db and message.content.strip():
+            lines = message.content.strip().splitlines()
+            title = lines[0][:200]
+            content = message.content.strip()
+            try:
+                await self.db.add_news_post(
+                    title=title,
+                    content=content,
+                    discord_message_id=str(message.id),
+                    author_id=message.author.id,
+                    author_name=message.author.display_name,
+                )
+                logger.info(f"Saved news post from #{message.channel.name}: {title}")
+            except Exception as e:
+                logger.error(f"Failed to save news post: {e}")
+        await self.process_commands(message)
+
 async def main():
     """Main function to run the bot"""
     # Create data directory if it doesn't exist

@@ -154,7 +154,51 @@ class Database:
         await db.execute("CREATE INDEX IF NOT EXISTS idx_join_leave_events_guild ON join_leave_events (guild_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_messages_guild ON scheduled_messages (guild_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_messages_next_run ON scheduled_messages (next_run)")
-    
+
+        # ── Community feature tables ────────────────────────────────────────
+
+        # User game profiles — self-managed by each member
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_game_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                game_name TEXT NOT NULL,
+                character_name TEXT NOT NULL,
+                server TEXT,
+                role_class TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_game_profiles_user ON user_game_profiles (user_id)")
+
+        # News posts — written by the Discord bot from announcement channel
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS news_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                discord_message_id TEXT,
+                author_id INTEGER,
+                author_name TEXT,
+                posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Clan achievements — admin-managed per game
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS clan_achievements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_name TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                achieved_at DATE,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_achievements_game ON clan_achievements (game_name)")
+
     async def _migrate_database(self, db: aiosqlite.Connection):
         """Handle database migrations"""
         
@@ -1169,6 +1213,208 @@ class Database:
             await db.commit()
             return True
     
+    # ── Game Profiles ──────────────────────────────────────────────────────
+
+    async def get_user_game_profiles(self, user_id: int) -> list:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT id, game_name, character_name, server, role_class, updated_at FROM user_game_profiles WHERE user_id = ? ORDER BY game_name",
+                (user_id,)
+            )
+            rows = await cursor.fetchall()
+            return [{"id": r[0], "game_name": r[1], "character_name": r[2], "server": r[3], "role_class": r[4], "updated_at": r[5]} for r in rows]
+
+    async def upsert_user_game_profile(self, user_id: int, game_name: str, character_name: str, server: str = None, role_class: str = None) -> dict:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT id FROM user_game_profiles WHERE user_id = ? AND game_name = ?",
+                (user_id, game_name)
+            )
+            existing = await cursor.fetchone()
+            now = datetime.utcnow().isoformat()
+            if existing:
+                await db.execute(
+                    "UPDATE user_game_profiles SET character_name = ?, server = ?, role_class = ?, updated_at = ? WHERE id = ?",
+                    (character_name, server, role_class, now, existing[0])
+                )
+                row_id = existing[0]
+            else:
+                cursor = await db.execute(
+                    "INSERT INTO user_game_profiles (user_id, game_name, character_name, server, role_class, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (user_id, game_name, character_name, server, role_class, now)
+                )
+                row_id = cursor.lastrowid
+            await db.commit()
+            return {"id": row_id, "game_name": game_name, "character_name": character_name, "server": server, "role_class": role_class, "updated_at": now}
+
+    async def delete_user_game_profile(self, profile_id: int, user_id: int) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM user_game_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id))
+            await db.commit()
+            return True
+
+    # ── News Posts ─────────────────────────────────────────────────────────
+
+    async def add_news_post(self, title: str, content: str, discord_message_id: str = None, author_id: int = None, author_name: str = None) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "INSERT INTO news_posts (title, content, discord_message_id, author_id, author_name, posted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (title, content, discord_message_id, author_id, author_name, datetime.utcnow().isoformat())
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_news_posts(self, limit: int = 20) -> list:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT id, title, content, discord_message_id, author_name, posted_at FROM news_posts ORDER BY posted_at DESC LIMIT ?",
+                (limit,)
+            )
+            rows = await cursor.fetchall()
+            return [{"id": r[0], "title": r[1], "content": r[2], "discord_message_id": r[3], "author_name": r[4], "posted_at": r[5]} for r in rows]
+
+    # ── Clan Achievements ──────────────────────────────────────────────────
+
+    async def get_clan_achievements(self, game_name: str = None) -> list:
+        async with aiosqlite.connect(self.db_path) as db:
+            if game_name:
+                cursor = await db.execute(
+                    "SELECT id, game_name, title, description, achieved_at, created_at FROM clan_achievements WHERE game_name = ? ORDER BY achieved_at DESC",
+                    (game_name,)
+                )
+            else:
+                cursor = await db.execute(
+                    "SELECT id, game_name, title, description, achieved_at, created_at FROM clan_achievements ORDER BY game_name, achieved_at DESC"
+                )
+            rows = await cursor.fetchall()
+            return [{"id": r[0], "game_name": r[1], "title": r[2], "description": r[3], "achieved_at": r[4], "created_at": r[5]} for r in rows]
+
+    async def add_clan_achievement(self, game_name: str, title: str, description: str = None, achieved_at: str = None, created_by: int = None) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "INSERT INTO clan_achievements (game_name, title, description, achieved_at, created_by) VALUES (?, ?, ?, ?, ?)",
+                (game_name, title, description, achieved_at, created_by)
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def update_clan_achievement(self, achievement_id: int, game_name: str, title: str, description: str = None, achieved_at: str = None) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE clan_achievements SET game_name = ?, title = ?, description = ?, achieved_at = ? WHERE id = ?",
+                (game_name, title, description, achieved_at, achievement_id)
+            )
+            await db.commit()
+            return True
+
+    async def delete_clan_achievement(self, achievement_id: int) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM clan_achievements WHERE id = ?", (achievement_id,))
+            await db.commit()
+            return True
+
+    # ── Leaderboard ────────────────────────────────────────────────────────
+
+    async def get_leaderboard(self, guild_id: int, limit: int = 50) -> list:
+        """Compute community score: days_active * 2 + role_count * 50 + role_changes * 5"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT
+                    u.user_id,
+                    u.username,
+                    u.display_name,
+                    u.avatar_url,
+                    CAST((julianday('now') - julianday(COALESCE(gm.joined_at, u.first_seen))) AS INTEGER) AS days_active,
+                    (
+                        SELECT COUNT(DISTINCT rc2.role_id)
+                        FROM role_changes rc2
+                        INNER JOIN (
+                            SELECT role_id, user_id, MAX(changed_at) AS latest
+                            FROM role_changes
+                            WHERE user_id = u.user_id AND guild_id = ?
+                            GROUP BY role_id, user_id
+                        ) latest_rc ON rc2.role_id = latest_rc.role_id
+                               AND rc2.user_id = latest_rc.user_id
+                               AND rc2.changed_at = latest_rc.latest
+                        WHERE rc2.action IN ('added', 'initial')
+                    ) AS current_role_count,
+                    (
+                        SELECT COUNT(*) FROM role_changes
+                        WHERE user_id = u.user_id AND guild_id = ?
+                    ) AS total_role_changes
+                FROM users u
+                LEFT JOIN guild_members gm ON u.user_id = gm.user_id AND gm.guild_id = ?
+                WHERE gm.is_active = 1
+                ORDER BY (
+                    CAST((julianday('now') - julianday(COALESCE(gm.joined_at, u.first_seen))) AS INTEGER) * 2
+                    + (
+                        SELECT COUNT(DISTINCT rc2.role_id)
+                        FROM role_changes rc2
+                        INNER JOIN (
+                            SELECT role_id, user_id, MAX(changed_at) AS latest
+                            FROM role_changes WHERE user_id = u.user_id AND guild_id = ?
+                            GROUP BY role_id, user_id
+                        ) latest_rc2 ON rc2.role_id = latest_rc2.role_id
+                               AND rc2.user_id = latest_rc2.user_id
+                               AND rc2.changed_at = latest_rc2.latest
+                        WHERE rc2.action IN ('added', 'initial')
+                    ) * 50
+                    + (SELECT COUNT(*) FROM role_changes WHERE user_id = u.user_id AND guild_id = ?) * 5
+                ) DESC
+                LIMIT ?
+            """, (guild_id, guild_id, guild_id, guild_id, guild_id, limit))
+            rows = await cursor.fetchall()
+            result = []
+            for i, r in enumerate(rows):
+                days = r[4] or 0
+                roles = r[5] or 0
+                changes = r[6] or 0
+                score = days * 2 + roles * 50 + changes * 5
+                result.append({
+                    "rank": i + 1,
+                    "user_id": str(r[0]),
+                    "username": r[1],
+                    "display_name": r[2],
+                    "avatar_url": r[3],
+                    "score": score,
+                    "days_active": days,
+                    "role_count": roles,
+                    "role_changes": changes,
+                })
+            return result
+
+    # ── Landing Stats (public) ─────────────────────────────────────────────
+
+    async def get_landing_stats(self, guild_id: int) -> dict:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM guild_members WHERE guild_id = ? AND is_active = 1",
+                (guild_id,)
+            )
+            row = await cursor.fetchone()
+            member_count = row[0] if row else 0
+            cursor = await db.execute(
+                "SELECT COUNT(DISTINCT role_id) FROM roles WHERE guild_id = ?",
+                (guild_id,)
+            )
+            row = await cursor.fetchone()
+            role_count = row[0] if row else 0
+            cursor = await db.execute(
+                "SELECT MIN(joined_at) FROM guild_members WHERE guild_id = ?",
+                (guild_id,)
+            )
+            row = await cursor.fetchone()
+            oldest = row[0] if row else None
+            days_active = 0
+            if oldest:
+                try:
+                    from datetime import timezone
+                    dt = datetime.fromisoformat(oldest.replace('Z', '+00:00'))
+                    days_active = (datetime.now(timezone.utc) - dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else datetime.now(timezone.utc) - dt).days
+                except Exception:
+                    pass
+            return {"member_count": member_count, "role_count": role_count, "days_active": days_active}
+
     async def close(self):
         """Close database connections"""
         # aiosqlite handles connection closing automatically

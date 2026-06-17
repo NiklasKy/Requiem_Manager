@@ -22,6 +22,7 @@ services:
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - MOD_ROLE_IDS=${MOD_ROLE_IDS}
       - RAIDHELPER_API_KEY=${RAIDHELPER_API_KEY}
+      - NEWS_CHANNEL_ID=${NEWS_CHANNEL_ID}
     depends_on:
       - api-dev
     networks:
@@ -61,6 +62,10 @@ services:
       - GUEST_USER_IDS=${GUEST_USER_IDS}
       - FILTER_ROLES=${FILTER_ROLES}
       - DEFAULT_FILTER_ROLE=${DEFAULT_FILTER_ROLE}
+      - ALLOWED_ROLE_IDS=${ALLOWED_ROLE_IDS}
+      - RAIDHELPER_API_KEY=${RAIDHELPER_API_KEY}
+      - ENVIRONMENT=development
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
     networks:
       - requiem-dev-network
     command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -84,6 +89,7 @@ services:
       - REACT_APP_API_URL=
       - REACT_APP_DEFAULT_GUILD_ID=${DISCORD_GUILD_ID}
       - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
     command: sh -c "npm install && npm start"
     depends_on:
       - api-dev

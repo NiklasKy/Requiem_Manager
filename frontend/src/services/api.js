@@ -10,10 +10,13 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for logging
+// Attach JWT token from localStorage to every request
 api.interceptors.request.use(
   (config) => {
-    console.log(`Making ${config.method?.toUpperCase()} request to ${config.url}`);
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -22,13 +25,20 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor — auto-logout on 401 (expired / revoked token)
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error('Response error:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      // Clear stored credentials and redirect to login
+      localStorage.removeItem('auth_token');
+      // Avoid redirect loop if already on login page
+      const EXCLUDED_PATHS = ['/login', '/auth/callback', '/unauthorized'];
+      const isExcluded = EXCLUDED_PATHS.some(p => window.location.pathname.startsWith(p));
+      if (!isExcluded) {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -124,7 +134,69 @@ export const apiService = {
   async getApiInfo() {
     const response = await api.get('/');
     return response.data;
-  }
+  },
+
+  // ── Profile ──────────────────────────────────────────────────
+  async getMyProfile() {
+    const response = await api.get('/api/profile/me');
+    return response.data;
+  },
+
+  async upsertGameProfile(data) {
+    const response = await api.put('/api/profile/game', data);
+    return response.data;
+  },
+
+  async deleteGameProfile(id) {
+    const response = await api.delete(`/api/profile/game/${id}`);
+    return response.data;
+  },
+
+  // ── Events ───────────────────────────────────────────────────
+  async getEvents() {
+    const response = await api.get('/api/events');
+    return response.data;
+  },
+
+  // ── News ─────────────────────────────────────────────────────
+  async getNews(limit = 20) {
+    const response = await api.get('/api/news', { params: { limit } });
+    return response.data;
+  },
+
+  // ── Leaderboard ──────────────────────────────────────────────
+  async getLeaderboard(limit = 50) {
+    const response = await api.get('/api/leaderboard', { params: { limit } });
+    return response.data;
+  },
+
+  // ── Achievements (public) ────────────────────────────────────
+  async getAchievements(gameName = null) {
+    const params = gameName ? { game_name: gameName } : {};
+    const response = await api.get('/api/achievements', { params });
+    return response.data;
+  },
+
+  async getLandingStats() {
+    const response = await api.get('/api/landing-stats');
+    return response.data;
+  },
+
+  // ── Achievements admin CRUD ───────────────────────────────────
+  async createAchievement(data) {
+    const response = await api.post('/api/admin/achievements', data);
+    return response.data;
+  },
+
+  async updateAchievement(id, data) {
+    const response = await api.put(`/api/admin/achievements/${id}`, data);
+    return response.data;
+  },
+
+  async deleteAchievement(id) {
+    const response = await api.delete(`/api/admin/achievements/${id}`);
+    return response.data;
+  },
 };
 
 export default api;
