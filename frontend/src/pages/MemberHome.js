@@ -18,29 +18,36 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 
-// ── Placeholder data (replaced in Phase 3) ─────────────────────────────
-const PLACEHOLDER_EVENTS = [
-  { id: 1, title: 'Raid Night — Tomb of Eternity', game: 'Where Winds Meet', date: 'Tomorrow, 20:00', spots: '12 / 20' },
-  { id: 2, title: 'PvP Tournament', game: 'Where Winds Meet', date: 'Sat, 18:00', spots: '8 / 16' },
-  { id: 3, title: 'AION 2 Beta Prep Session', game: 'AION 2', date: 'Sun, 19:00', spots: '5 / 10' },
-];
-
-const PLACEHOLDER_LEADERBOARD = [
-  { rank: 1, name: 'Arathorn', score: 2840, roles: 7 },
-  { rank: 2, name: 'Sylvara', score: 2610, roles: 6 },
-  { rank: 3, name: 'Kazimir', score: 2490, roles: 6 },
-  { rank: 4, name: 'Veloris', score: 2310, roles: 5 },
-  { rank: 5, name: 'Thornwood', score: 2150, roles: 5 },
-];
-
-const PLACEHOLDER_NEWS = [
-  { id: 1, title: 'AION 2 Beta Keys Secured!', summary: 'We managed to get 20 beta access keys for the upcoming AION 2 closed beta. More info in #announcements.', date: '2h ago' },
-  { id: 2, title: 'Raid Roster Update', summary: 'New raid composition posted for the Tomb of Eternity progression team. Check #raid-roster for details.', date: '1d ago' },
-];
-// ───────────────────────────────────────────────────────────────────────
-
 const CR    = '#c0392b';
 const CR_LT = '#e74c3c';
+
+/** Returns a human-readable relative time string from an ISO date string. */
+function relativeTime(isoString) {
+  if (!isoString) return '';
+  const diff = Date.now() - new Date(isoString).getTime();
+  if (isNaN(diff)) return '';
+  const minutes = Math.floor(diff / 60_000);
+  const hours   = Math.floor(diff / 3_600_000);
+  const days    = Math.floor(diff / 86_400_000);
+  if (minutes < 60)  return `${minutes}m ago`;
+  if (hours   < 24)  return `${hours}h ago`;
+  if (days    < 7)   return `${days}d ago`;
+  return new Date(isoString).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Formats a Unix-seconds timestamp into a short weekday + time string. */
+function formatEventDate(startTime) {
+  if (!startTime || typeof startTime !== 'number') return '';
+  try {
+    return new Date(startTime * 1000).toLocaleString('en-GB', {
+      weekday: 'short',
+      hour:    '2-digit',
+      minute:  '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
 
 const SectionHeader = ({ icon: Icon, title, linkTo, linkLabel }) => {
   const navigate = useNavigate();
@@ -73,31 +80,79 @@ const Card = ({ children, sx = {} }) => (
   </Box>
 );
 
+const EmptyState = ({ message }) => (
+  <Typography variant="caption" sx={{ color: alpha('#fff', 0.3), display: 'block', textAlign: 'center', py: 1 }}>
+    {message}
+  </Typography>
+);
+
+const LoadingState = () => (
+  <Typography variant="caption" sx={{ color: alpha('#fff', 0.3), display: 'block', textAlign: 'center', py: 1 }}>
+    Loading...
+  </Typography>
+);
+
 const MemberHome = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [leaderboard, setLeaderboard] = useState(PLACEHOLDER_LEADERBOARD);
-  const defaultGuildId = process.env.REACT_APP_DEFAULT_GUILD_ID || '';
+  const [loading,     setLoading]     = useState(true);
+  const [events,      setEvents]      = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [news,        setNews]        = useState([]);
 
   useEffect(() => {
-    if (defaultGuildId) {
-      apiService.getLeaderboard(defaultGuildId)
-        .then(data => {
-          if (data && data.length > 0) {
-            setLeaderboard(
-              data.slice(0, 5).map((entry, idx) => ({
-                rank: idx + 1,
-                name: entry.username || entry.user_id,
-                score: entry.score || 0,
-                roles: entry.role_count || 0,
-              }))
-            );
-          }
-        })
-        .catch(() => {}); // Keep placeholder on error
-    }
-  }, [defaultGuildId]);
+    Promise.allSettled([
+      apiService.getLeaderboard(5),
+      apiService.getEvents(),
+      apiService.getNews(3),
+    ]).then(([lbResult, evResult, newsResult]) => {
+
+      // ── Leaderboard ──────────────────────────────────────────────
+      if (lbResult.status === 'fulfilled' && Array.isArray(lbResult.value)) {
+        setLeaderboard(
+          lbResult.value.slice(0, 5).map((entry, idx) => ({
+            rank:  idx + 1,
+            name:  entry.display_name || entry.username || entry.user_id,
+            score: Math.round((entry.score ?? 0) * 10) / 10,
+          }))
+        );
+      }
+
+      // ── Events ───────────────────────────────────────────────────
+      if (evResult.status === 'fulfilled' && Array.isArray(evResult.value)) {
+        setEvents(
+          evResult.value.slice(0, 3).map((ev) => {
+            const signedUpCount = ev.signups?.signedUpCount ?? ev.signUpCount;
+            const maxSize       = ev.signups?.maxSize       ?? ev.size;
+            const spots = (signedUpCount != null && maxSize != null)
+              ? `${signedUpCount} / ${maxSize}`
+              : '';
+            return {
+              id:    ev.id,
+              title: ev.title || 'Unnamed Event',
+              date:  formatEventDate(ev.startTime),
+              spots,
+            };
+          })
+        );
+      }
+
+      // ── News ─────────────────────────────────────────────────────
+      if (newsResult.status === 'fulfilled' && Array.isArray(newsResult.value)) {
+        setNews(
+          newsResult.value.map((post) => ({
+            id:      post.id,
+            title:   post.title || 'Untitled',
+            summary: post.content ? post.content.slice(0, 140) : '',
+            date:    relativeTime(post.posted_at),
+          }))
+        );
+      }
+
+      setLoading(false);
+    });
+  }, []);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -173,26 +228,34 @@ const MemberHome = () => {
         <Grid item xs={12} sm={6} lg={4}>
           <Card>
             <SectionHeader icon={CalendarIcon} title="Upcoming Events" linkTo="/events" linkLabel="All events" />
-            <Stack spacing={1.5}>
-              {PLACEHOLDER_EVENTS.map((ev) => (
-                <Box
-                  key={ev.id}
-                  sx={{ p: 1.5, borderRadius: '10px', bgcolor: alpha('#fff', 0.03), border: `1px solid ${alpha('#fff', 0.06)}` }}
-                >
-                  <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.3, mb: 0.5 }}>
-                    {ev.title}
-                  </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="caption" sx={{ color: alpha('#fff', 0.35) }}>
-                      {ev.date}
+            {loading ? (
+              <LoadingState />
+            ) : events.length === 0 ? (
+              <EmptyState message="No upcoming events" />
+            ) : (
+              <Stack spacing={1.5}>
+                {events.map((ev) => (
+                  <Box
+                    key={ev.id}
+                    sx={{ p: 1.5, borderRadius: '10px', bgcolor: alpha('#fff', 0.03), border: `1px solid ${alpha('#fff', 0.06)}` }}
+                  >
+                    <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.3, mb: 0.5 }}>
+                      {ev.title}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: alpha(CR_LT, 0.85), fontWeight: 600 }}>
-                      {ev.spots}
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="caption" sx={{ color: alpha('#fff', 0.35) }}>
+                        {ev.date}
+                      </Typography>
+                      {ev.spots && (
+                        <Typography variant="caption" sx={{ color: alpha(CR_LT, 0.85), fontWeight: 600 }}>
+                          {ev.spots}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              ))}
-            </Stack>
+                ))}
+              </Stack>
+            )}
           </Card>
         </Grid>
 
@@ -200,26 +263,32 @@ const MemberHome = () => {
         <Grid item xs={12} sm={6} lg={2}>
           <Card>
             <SectionHeader icon={TrophyIcon} title="Top Members" linkTo="/leaderboard" linkLabel="Full board" />
-            <Stack spacing={1.25}>
-              {leaderboard.map((entry) => (
-                <Box key={entry.rank} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                  <Typography
-                    variant="caption"
-                    sx={{ width: 18, color: entry.rank <= 3 ? '#f59e0b' : alpha('#fff', 0.3), fontWeight: 700, textAlign: 'center', flexShrink: 0 }}
-                  >
-                    {entry.rank}
-                  </Typography>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="caption" sx={{ color: '#fff', fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {entry.name}
+            {loading ? (
+              <LoadingState />
+            ) : leaderboard.length === 0 ? (
+              <EmptyState message="No data available" />
+            ) : (
+              <Stack spacing={1.25}>
+                {leaderboard.map((entry) => (
+                  <Box key={entry.rank} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ width: 18, color: entry.rank <= 3 ? '#f59e0b' : alpha('#fff', 0.3), fontWeight: 700, textAlign: 'center', flexShrink: 0 }}
+                    >
+                      {entry.rank}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: alpha('#fff', 0.3), fontSize: '0.65rem' }}>
-                      {entry.score} pts
-                    </Typography>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: '#fff', fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: alpha('#fff', 0.3), fontSize: '0.65rem' }}>
+                        {entry.score} pts
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              ))}
-            </Stack>
+                ))}
+              </Stack>
+            )}
           </Card>
         </Grid>
 
@@ -227,25 +296,31 @@ const MemberHome = () => {
         <Grid item xs={12} sm={6} lg={3}>
           <Card>
             <SectionHeader icon={NewsIcon} title="Latest News" linkTo="/news" linkLabel="All news" />
-            <Stack spacing={1.5}>
-              {PLACEHOLDER_NEWS.map((post) => (
-                <Box
-                  key={post.id}
-                  sx={{ p: 1.5, borderRadius: '10px', bgcolor: alpha('#fff', 0.025), border: `1px solid ${alpha('#fff', 0.05)}`, cursor: 'pointer', '&:hover': { borderColor: alpha(CR, 0.35) } }}
-                  onClick={() => navigate('/news')}
-                >
-                  <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.3, mb: 0.5 }}>
-                    {post.title}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: alpha('#fff', 0.4), lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {post.summary}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: alpha('#fff', 0.25), display: 'block', mt: 0.75, fontSize: '0.68rem' }}>
-                    {post.date}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
+            {loading ? (
+              <LoadingState />
+            ) : news.length === 0 ? (
+              <EmptyState message="No news yet" />
+            ) : (
+              <Stack spacing={1.5}>
+                {news.map((post) => (
+                  <Box
+                    key={post.id}
+                    sx={{ p: 1.5, borderRadius: '10px', bgcolor: alpha('#fff', 0.025), border: `1px solid ${alpha('#fff', 0.05)}`, cursor: 'pointer', '&:hover': { borderColor: alpha(CR, 0.35) } }}
+                    onClick={() => navigate('/news')}
+                  >
+                    <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.3, mb: 0.5 }}>
+                      {post.title}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: alpha('#fff', 0.4), lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {post.summary}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: alpha('#fff', 0.25), display: 'block', mt: 0.75, fontSize: '0.68rem' }}>
+                      {post.date}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
           </Card>
         </Grid>
 
