@@ -139,6 +139,7 @@ Requiem_Manager/
 │   │       ├── admin.py              # Admin commands
 │   │       ├── scheduler.py          # Message scheduler
 │   │       ├── raidhelper.py         # Raid helper integration
+│   │       ├── role_comparison.py    # Discord role comparison command
 │   │       └── activity_recognition.py  # AI-powered screenshot analysis
 │   ├── database/                     # Database layer
 │   │   └── database.py               # SQLite handler with migrations
@@ -175,6 +176,7 @@ Requiem_Manager/
 - `/recent_changes [limit]` - Show recent username/nickname changes
 - `/role_history <user>` - View complete role change history for a user
 - `/server_stats` - Display comprehensive server statistics
+- `/compare_roles <base_role> <required_role> [include_bots] [private]` - Find members who have one role but are missing another role
 - `/analyze_activity <image1> [image2-5]` - Analyze game activity screenshots to extract member names and weekly activity points using AI
 
 ### Admin Commands

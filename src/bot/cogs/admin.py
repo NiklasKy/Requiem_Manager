@@ -206,7 +206,8 @@ class AdminCog(commands.Cog):
                   "`/role_history` - Role history\n"
                   "`/analyze_activity` - Analyze game activity screenshots\n"
                   "`/events` - List active Raid-Helper events\n"
-                  "`/checksignups` - Compare role members with event signups",
+                  "`/checksignups` - Compare role members with event signups\n"
+                  "`/compare_roles` - Find members missing a required role",
             inline=False
         )
         
