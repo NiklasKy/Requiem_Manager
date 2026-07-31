@@ -176,7 +176,7 @@ Requiem_Manager/
 - `/recent_changes [limit]` - Show recent username/nickname changes
 - `/role_history <user>` - View complete role change history for a user
 - `/server_stats` - Display comprehensive server statistics
-- `/compare_roles <base_role> <required_role> [include_bots] [private]` - Find members who have one role but are missing another role
+- `/compare_roles <base_role> <required_role> [filter] [include_bots] [private]` - Compare role memberships and filter matching or missing members
 - `/analyze_activity <image1> [image2-5]` - Analyze game activity screenshots to extract member names and weekly activity points using AI
 
 ### Admin Commands
