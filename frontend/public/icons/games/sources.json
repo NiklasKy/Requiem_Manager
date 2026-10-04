@@ -1,0 +1,98 @@
+﻿[
+    {
+        "title":  "Revelation Online",
+        "file":  "icons/games/revelation-online.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/876330/d4810f802eb9ea756839f06a4281e70f99061ef1.jpg",
+        "page":  "https://steamcommunity.com/app/876330/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "ArcheAge: Unchained",
+        "file":  "icons/games/archeage-unchained.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/1147660/c62a9b27af557c00c58dba5962cedd74f9520906.jpg",
+        "page":  "https://store.steampowered.com/app/1147660/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Riders of Icarus",
+        "file":  "icons/games/riders-of-icarus.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/442080/0d9bb7847fdf3485b375d0133998795a9749347d.jpg",
+        "page":  "https://steamcommunity.com/app/442080/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "MU Online",
+        "file":  "icons/games/mu-online.webp",
+        "source":  "https://static.webzen.com/mu/official/v01/dist/images/img_globalnav_bi.png",
+        "page":  "https://muonline.webzen.com/en",
+        "checked":  "2026-10-04",
+        "note":  "Game logo from the official publisher navigation."
+    },
+    {
+        "title":  "MapleStory 2",
+        "file":  "icons/games/maplestory-2.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/560380/cb5162531011571b4028a06818a7be9154aa3458.jpg",
+        "page":  "https://steamcommunity.com/app/560380/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "New World",
+        "file":  "icons/games/new-world.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/1063730/672e6cf0670022bc9222af15e5f8cd4b21872d1b.jpg",
+        "page":  "https://steamcommunity.com/app/1063730/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Lost Ark",
+        "file":  "icons/games/lost-ark.webp",
+        "source":  "https://d3irh93dd5ckql.cloudfront.net/statics/2026-10-04/images/apple-touch-icon.png",
+        "page":  "https://www.playlostark.com/en-us",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Throne \u0026 Liberty",
+        "file":  "icons/games/throne-and-liberty.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/2429640/f03eb7d1aee8d7997b28ccc8de047b8fe561a657.jpg",
+        "page":  "https://steamcommunity.com/app/2429640/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Bless Online",
+        "file":  "icons/games/bless-online.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/681660/9dc17a36db36a4994933e169d868817bd7e9b2c7.jpg",
+        "page":  "https://steamcommunity.com/app/681660/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Tower of Fantasy",
+        "file":  "icons/games/tower-of-fantasy.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/2064650/41554497b2fc3410ee76d45af00d6f2ab4003990.jpg",
+        "page":  "https://steamcommunity.com/app/2064650/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    },
+    {
+        "title":  "Tarisland",
+        "file":  "icons/games/tarisland.webp",
+        "source":  "https://img.utdstc.com/icon/674/6f6/6746f62e0465b67ee2477751e268272a4101c61de9ace58163c15981b46bf047:200",
+        "page":  "https://tarisland.en.uptodown.com/windows",
+        "checked":  "2026-10-04",
+        "note":  "Publisher game icon mirrored on Uptodown; original global site and App Store listing unavailable."
+    },
+    {
+        "title":  "Where Winds Meet",
+        "file":  "icons/games/where-winds-meet.webp",
+        "source":  "https://shared.fastly.steamstatic.com/community_assets/images/apps/3564740/531ce29af277670c3aedc30d3b0bef92ee1b18c4.jpg",
+        "page":  "https://store.steampowered.com/app/3564740/",
+        "checked":  "2026-10-04",
+        "note":  "Publisher-supplied Steam app icon or official game touch icon."
+    }
+]

@@ -10,6 +10,7 @@ This folder contains detailed guides and documentation for the Requiem Discord U
 - **[CLOUDFLARE_SSL_SETUP.md](CLOUDFLARE_SSL_SETUP.md)** - Production HTTPS setup with Cloudflare origin certificates
 
 ### Feature Guides
+- **[public-website-redesign.md](public-website-redesign.md)** - Public homepage design, division focus, asset sources, backup, and local review
 - **[ACTIVITY_RECOGNITION_GUIDE.md](ACTIVITY_RECOGNITION_GUIDE.md)** - AI-powered game screenshot analysis with OpenAI Vision API
 - **[MESSAGE_SCHEDULER_GUIDE.md](MESSAGE_SCHEDULER_GUIDE.md)** - Complete guide for automated message scheduling with role pings
 - **[SCHEDULER_TEST_GUIDE.md](SCHEDULER_TEST_GUIDE.md)** - Testing and troubleshooting the message scheduler
