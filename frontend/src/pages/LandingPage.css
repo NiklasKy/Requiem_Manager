@@ -674,6 +674,20 @@ html:has(.rq-member-tools[open]) {
   color: var(--rq-muted);
   font-size: 16px;
 }
+.rq-public .rq-division__promo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: 12px;
+  color: var(--rq-accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+.rq-division__promo:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
 .rq-division__apply {
   display: flex;
   align-items: center;

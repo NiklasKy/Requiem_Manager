@@ -14,6 +14,7 @@ const DIVISIONS = Object.freeze([
     number: '01',
     title: 'Aion 2',
     artwork: '/artwork/aion-2-hero.webp',
+    promoUrl: 'https://www.youtube.com/watch?v=Q_P8g4_X2cU',
     focus: 'PvE / PvP / Guild progression',
     description:
       'Build our next division in Atreia. Find your group, prepare for endgame, and help shape Requiem’s next chapter.',
@@ -171,6 +172,8 @@ export default function LandingPage() {
           </a>
           <p>
             © {new Date().getFullYear()} Requiem
+            <br />
+            <span>Logos by Ryo · Website by Niklas Ky</span>
             <br />
             <span>Game artwork belongs to its respective publishers.</span>
           </p>

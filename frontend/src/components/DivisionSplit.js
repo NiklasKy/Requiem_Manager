@@ -56,6 +56,18 @@ export default function DivisionSplit({ divisions, onSelect }) {
                 <p className="rq-division__description">
                   {division.description}
                 </p>
+                {division.promoUrl && (
+                  <a
+                    className="rq-division__promo"
+                    href={division.promoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Watch promo on YouTube for ${division.title} (opens in a new tab)`}
+                  >
+                    <span>Watch promo on YouTube</span>
+                    <PublicArrow diagonal />
+                  </a>
+                )}
                 <a
                   className="rq-division__apply"
                   href="#apply"

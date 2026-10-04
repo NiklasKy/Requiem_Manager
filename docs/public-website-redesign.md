@@ -27,10 +27,10 @@ Browser screenshots and text observations are in the original backup's `inspirat
 ## Page structure and application path
 
 1. `PublicHero.js` introduces Requiem, hardcore and semi-hardcore play, the animated community banner, and the valid public membership count. Its primary action links to `#divisions`.
-2. `DivisionSplit.js` displays Aion 2 and World of Warcraft Forever with equal prominence. Both actions link to `#apply`. Clicking an action also updates the selected division in the later application copy.
+2. `DivisionSplit.js` displays Aion 2 and World of Warcraft Forever with equal prominence. Both application actions link to `#apply`. Clicking an action also updates the selected division in the later application copy. The Aion 2 entry also has a red **Watch promo on YouTube** link to the community-supplied video `https://www.youtube.com/watch?v=Q_P8g4_X2cU`. It opens in a new tab with `noopener noreferrer` and does not load a video player into the homepage.
 3. `#apply` presents four community-supplied criteria, followed by the sole Discord invitation. Choosing a division does not submit an application, select a Discord role, or change the invitation URL. The copy explains that visitors complete their application in the division's Discord area.
 4. `GameHistory.js` shows the Requiem logo beside twelve community-supplied games and achievements, with a publisher source for the Throne & Liberty conquest win.
-5. The footer contains application navigation, member tool access, and a return-to-top link.
+5. The footer contains application navigation, member tool access, a return-to-top link, and the community-supplied credits **Logos by Ryo · Website by Niklas Ky**, alongside the existing publisher artwork attribution.
 
 ### Member tools
 
@@ -57,6 +57,22 @@ Division descriptions are editorial drafts. No age limit, server, faction, raid 
 
 The fixed invitation `https://discord.gg/requiem-community` was verified against Discord's public invite endpoint on October 4, 2026 and resolves to Requiem. The membership figure appears only when `/api/landing-stats` supplies a positive safe integer. Failed, zero, or malformed responses display community copy without a number. The homepage no longer renders the achievements feed; authenticated member features retain their existing implementation.
 
+## Social link previews
+
+`frontend/public/index.html` declares the public title, description, canonical URL, Open Graph metadata, and a `summary_large_image` Twitter card in the initial HTML. A crawler does not need to execute React to discover them. The document, Open Graph, and Twitter titles agree with the community's requested wording: **Requiem | Hardcore MMO Community**. The description introduces the community, both divisions, PvP, and Discord applications. The canonical URL and `og:url` both identify `https://requiem-guild.com/`.
+
+Both preview formats reference the absolute HTTPS URL `https://requiem-guild.com/artwork/requiem-social-v1.png`. This is an unchanged copy of the community's supplied 1920 x 1080 PNG banner, approximately 502 kB, with matching SHA-256 hashes. The image metadata includes its MIME type, dimensions, and a description of the skull artwork and wordmark. The versioned filename allows future artwork revisions to use a distinct asset URL. The social image is separate from the compressed WebP poster and is not requested by the homepage itself.
+
+The tags follow the [Open Graph protocol](https://ogp.me/). No social account, structured rating, or new achievement is invented. The theme color now matches the homepage's red accent. These are shared static defaults for the existing client-rendered application; route-specific metadata and indexing policies are outside this change.
+
+Publish the updated frontend and its public assets using the existing production build:
+
+```sh
+docker compose -f docker-compose.prod.yml up -d --build --no-deps frontend
+```
+
+After deployment, verify that the production page returns the new tags and that the public PNG URL returns `image/png`, then share the website link in Discord to check the actual preview. Local metadata and image checks do not establish a live Discord rendering result.
+
 ## Motion
 
 `useSectionMotion.js` observes visibility, the document visibility state, and the operating system's reduced-motion preference. `PublicHero.js` uses that state to play or pause a native video and handles playback rejection while retaining the banner. There is no animation dependency or JavaScript frame loop.
@@ -77,6 +93,7 @@ The current homepage uses approximately 315 kB of compressed game artwork, loade
 | File | Source |
 | --- | --- |
 | `artwork/requiem-banner.webp` | User-supplied `F:\#Communitys\Requiem\Requiem_Banner_invite.png`, 1920 x 1080, compressed without resizing |
+| `artwork/requiem-social-v1.png` | Unchanged copy of the same user-supplied 1920 x 1080 PNG banner for social link previews |
 | `artwork/requiem-atmosphere.webm`, `artwork/requiem-atmosphere.mp4` | User-supplied `F:\#Communitys\Requiem\req_animated.gif`, 500 x 281 and 105 frames; converted to 500 x 282, 60 fps with blended intermediate frames, a softened loop boundary, and no audio |
 | `artwork/aion-2-hero.webp` | [Official Aion 2 website](https://aion2.plaync.com/), [logo-free poster](https://assets.playnccdn.com/res/aion2/update/2026/global/260421_teaser/9th/pc/img/main/5637950c681a22d14e99cfc681949894a4caa005.webp) |
 | `artwork/wow-forever.webp` | [Official World of Warcraft: Forever page](https://worldofwarcraft.blizzard.com/en-us/forever), [masthead artwork](https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt4d412035d16da095/6aa204fb2c0580bfcf273e54/masthead-art.jpg) |
@@ -104,6 +121,7 @@ Backups are outside the repository under `F:\#Communitys\Requiem\Backups`:
 | `2026-10-04-design-v5-before-gothic` | Cinematic opening, both quarter-speed video files, and twelve historical game entries before the faster loop, Gothic wordmark, and game icons |
 | `2026-10-04-design-v6-before-member-tools` | Gothic opening, real game history, and confirmed criteria before replacing the public internal-login links with external division tools |
 | `2026-10-04-design-v7-before-smooth-hero` | Both 25 fps video files and the hero sources/styles before adding 60 fps intermediate frames and removing the browser blur filter |
+| `2026-10-04-design-v8-before-social-preview` | Public HTML entrypoint and redesign guide before adding social metadata and the high-resolution preview image |
 
 Each snapshot has restoration notes. Secrets, private environment files, dependencies, databases, and backend state are excluded. Original source and public-site archives remain unchanged.
 
@@ -136,3 +154,7 @@ After replacing the sample criteria, the production build was rebuilt successful
 The member-tool revision also compiles successfully. A focused Chromium review covered opening from both header and footer, keyboard focus containment, Escape and close-button dismissal, backdrop dismissal, focus restoration, locked background scrolling, ten widths from 320 to 2560 px, and a short 390 x 420 viewport with a scrollable dialog. Neither the modal nor its triggers overlap or overflow. Both tool links opened their exact supplied addresses in new tabs with a null opener; external destinations were intercepted as browser fixtures, so this verifies navigation rather than a real tool login. Reduced motion disables the dialog entrance. An axe review of the open dialog and surrounding homepage reported zero WCAG 2/2.1 A/AA violations; screenshots and results are in `design-review-member-tools`. The public homepage contains no internal-login link.
 
 The smooth-hero build compiles successfully. An 8.5-second Chromium sampling run on desktop and mobile measured a median media-frame step of 17 ms, compared with 40 ms in the preceding clip, across two loop wraps per viewport. Playback quality reported 3 dropped frames out of 514 on desktop and 4 out of 513 on mobile; this headless review does not guarantee a frame rate on every display. Decoded frame hashes confirm 240 distinct frames, and the first/last-frame pixel difference is approximately half the preceding loop's difference. The review also verifies offscreen pause/resume, live and initial reduced motion, a playable four-second MP4 fallback, the high-resolution poster, and the narrow layout. Captures and measurements are in `design-review-smooth-hero`. The browser now reports no CSS video filter and no JavaScript errors.
+
+The social-preview build compiles successfully. A local HTTP request with a Discordbot user agent returns the new metadata in the initial HTML; parsing does not execute JavaScript. Checks confirm unique metadata tags, matching document/Open Graph/Twitter titles and descriptions, matching canonical and Open Graph URLs, an absolute HTTPS image URL, and a large-image card type. GET and HEAD requests to the locally served image both return HTTP 200 with `image/png`. The PNG header confirms 1920 x 1080 dimensions, and its SHA-256 hash matches the unchanged supplied banner. Results and the review helper are in the v8 snapshot's `design-review-social-preview` directory. The production site and actual Discord preview still require verification after deployment.
+
+The footer credits, final community title, and Aion 2 promo link also compile successfully. A focused Chromium review at 320, 390, 800, and 1440 px confirms the exact title **Requiem | Hardcore MMO Community** across the document, Open Graph, and Twitter tags. The footer credits remain readable, the red promo link fits above the application action, and the page has no horizontal overflow or JavaScript errors. The promo action opens the exact supplied YouTube URL in a new tab with a null opener; the destination was intercepted as a navigation fixture, so actual video playback was not verified. Results and desktop/mobile captures are in `design-review-social-preview/credits-and-promo-review.json` and its adjacent PNG files within the v8 snapshot.
