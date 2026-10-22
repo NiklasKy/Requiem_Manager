@@ -10,26 +10,38 @@ With explicit recipients:
 /dm message:Please sign up for Saturday's raid. recipients:@Alice @Bob @Charlie
 ```
 
-The `recipients` option accepts user mentions or Discord user IDs separated by spaces, commas, or semicolons. Duplicate recipients are removed. Role mentions, `@everyone`, and plain usernames are rejected.
+The `recipients` option accepts user mentions or Discord user IDs separated by spaces, commas, or semicolons. Duplicate recipients are removed. Role mentions and `@everyone` are rejected. Discord controls native `@` suggestions in this text field; those suggestions can be limited by channel visibility.
 
-With a searchable member picker:
+To search the entire server, enter a name **without `@`** instead:
+
+```text
+/dm message:Please sign up for Saturday's raid. recipients:Alice
+```
+
+The bot searches server nicknames, usernames, global display names, and user IDs. Name searches are case-insensitive substring filters, up to 100 characters long. Matching names are shown for explicit selection; they are never sent a message just because their name matches. Names containing spaces are supported as one search phrase. Bots are excluded from search results.
+
+To open the server member picker without an initial filter:
 
 ```text
 /dm message:Please sign up for Saturday's raid.
 ```
 
-1. Choose up to 25 members in the picker. Changing the selection replaces the previous selection.
-2. Review the private message preview and recipient list.
-3. Click **Send reminder**, or **Cancel** to discard it. The preview expires after five minutes.
-4. The bot posts a public progress placeholder in the invocation channel, then sends the DMs sequentially and replaces the placeholder with each person's result.
+1. Select members from the results. Each selection **adds** people to the existing recipient list, up to 25 total.
+2. Click **Search members** to enter another name or user ID. Search spans the entire server, including offline members and members without access to the invocation channel. Your previous selections are preserved. Leave the search blank to show all unselected members.
+3. Up to 25 matching members are shown at a time. Narrow the search if more people match. Nickname, username, and user ID are shown to distinguish similar names. Use **Clear selection** to start over.
+4. Review the private message preview and recipient list.
+5. Click **Send reminder**, or **Cancel** to discard it. The preview expires after five minutes.
+6. The bot posts a public progress placeholder in the invocation channel, then sends the DMs sequentially and replaces the placeholder with each person's result.
 
-Each recipient receives the reminder text together with a small context embed identifying the requesting staff member and the server. Mentions are disabled in reminders and reports.
+Each recipient receives the reminder text together with a small context embed containing only `Sent by @requester` and the server name, without a title. Mentions are disabled in reminders and reports.
 
 ## Access
 
 The command works only inside a server. It is available to members with Discord's **Administrator** permission, users listed in `ADMIN_USER_IDS`, or members with a role listed in `ADMIN_ROLE_IDS` or `MOD_ROLE_IDS`. These environment variables already exist in the bot's Compose configuration.
 
 Only the requester can use their preview's controls. The bot fetches the requester's current server membership and checks their authorization again immediately before starting delivery. It also fetches each recipient's current server membership before sending; users outside that server and bot accounts do not receive reminders.
+
+Server member search uses the bot's member cache and its existing **Server Members Intent**. If the cache is incomplete, the command requests the full server member list before opening the picker. If this fails, it reports an error instead of showing a partial list. Keep the already-required Server Members Intent enabled in the Discord Developer Portal. The search does not change anyone's channel permissions.
 
 If Discord command permissions were restricted manually, allow the configured staff roles to use `/dm` under **Server Settings → Integrations → the bot**. The bot does not require Administrator permission to send DMs. Its existing slash-command installation and access to the invocation channel are sufficient when Discord allows the interactions and embedded reports.
 
@@ -73,4 +85,4 @@ Offline verification, using an environment with `discord.py` 2.7.1 installed:
 python -m unittest discover -s tests -v
 ```
 
-These tests use mocked Discord requests and never send real DMs. For live verification, use consenting test accounts: one that accepts bot DMs and one that rejects them. Confirm the private picker/preview, the received message and sender context, the public report in the invocation channel, authorization restrictions, and that the report never includes reminder text.
+These tests use mocked Discord requests and never send real DMs. For live verification, use consenting test accounts: one that accepts bot DMs and one that rejects them. Include a member without access to the invocation channel and verify that they appear in the server-wide search. Confirm that multiple searches preserve selected recipients, and check the private picker/preview, the received message and sender context, the public report in the invocation channel, authorization restrictions, and that the report never includes reminder text.

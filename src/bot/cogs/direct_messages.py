@@ -40,6 +40,18 @@ def parse_recipients(value: str) -> list[int]:
     return recipients
 
 
+def find_members(members, query: str, selected_ids: list[int]) -> tuple[list, int]:
+    """Search the guild member cache without applying channel visibility filters."""
+    query = query.strip().casefold()
+    selected = set(selected_ids)
+    matches = [member for member in members if not member.bot and member.id not in selected
+               and any(query in value.casefold() for value in (
+                   member.display_name, member.name, member.global_name or "", str(member.id),
+               ))]
+    matches.sort(key=lambda member: (member.display_name.casefold(), member.id))
+    return matches[:MAX_RECIPIENTS], len(matches)
+
+
 @dataclass(frozen=True)
 class DeliveryResult:
     user_id: int
@@ -70,26 +82,72 @@ def delivery_report(sender_id: int, results: list[DeliveryResult]) -> discord.Em
     return embed
 
 
+class MemberSearchModal(discord.ui.Modal, title="Search all server members"):
+    query = discord.ui.TextInput(
+        label="Member name or user ID",
+        placeholder="Search by nickname, username, or ID; leave blank to show all",
+        max_length=100,
+        required=False,
+    )
+
+    def __init__(self, reminder):
+        super().__init__(timeout=180)
+        self.reminder = reminder
+        self.query.default = reminder.query
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not await self.reminder.interaction_check(interaction):
+            return
+        self.reminder.query = self.query.value.strip()
+        self.reminder.refresh_members()
+        await interaction.response.edit_message(embed=self.reminder.preview(), view=self.reminder,
+                                                allowed_mentions=discord.AllowedMentions.none())
+
+    async def on_error(self, interaction, error):
+        await self.reminder.on_error(interaction, error, None)
+
+
 class ReminderView(discord.ui.View):
     """Keep the composition private and require an explicit send action."""
 
     def __init__(self, cog, interaction: discord.Interaction, message: str,
-                 recipient_ids: list[int]):
+                 recipient_ids: list[int], query: str = ""):
         super().__init__(timeout=300)
         self.cog = cog
         self.origin = interaction
         self.message = message
         self.recipient_ids = recipient_ids
+        self.query = query
         self.submitted = False
-        self.recipients.default_values = [discord.Object(id=user_id) for user_id in recipient_ids]
-        self.send.disabled = not recipient_ids
+        self.match_count = 0
+        self.refresh_members()
+
+    def refresh_members(self):
+        matches, self.match_count = find_members(self.origin.guild.members, self.query, self.recipient_ids)
+        remaining = MAX_RECIPIENTS - len(self.recipient_ids)
+        self.recipients.options = [discord.SelectOption(
+            label=member.display_name[:100], value=str(member.id),
+            description=f"@{member.name} | {member.id}"[:100],
+        ) for member in matches] or [discord.SelectOption(label="No matching members", value="none")]
+        self.recipients.max_values = max(1, min(len(matches), remaining))
+        self.recipients.disabled = not matches or remaining <= 0
+        self.search.disabled = remaining <= 0
+        self.clear.disabled = not self.recipient_ids
+        self.send.disabled = not self.recipient_ids
 
     def preview(self) -> discord.Embed:
         embed = discord.Embed(title="Direct message preview", description=self.message)
         embed.add_field(
             name=f"Recipients ({len(self.recipient_ids)}/{MAX_RECIPIENTS})",
             value=" ".join(f"<@{user_id}>" for user_id in self.recipient_ids)
-            or "Choose members below.",
+            or "Choose members below or search the entire server.",
+            inline=False,
+        )
+        embed.add_field(
+            name="Server member search",
+            value=f"Filter: {discord.utils.escape_markdown(self.query) if self.query else 'All members'}\n"
+                  f"Showing {min(self.match_count, MAX_RECIPIENTS)} of {self.match_count} unselected matches. "
+                  "Use Search members to narrow the results. Selections are added to your recipient list.",
             inline=False,
         )
         embed.set_footer(text="The delivery report will be public in this channel. Preview expires in 5 minutes.")
@@ -108,13 +166,32 @@ class ReminderView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Select reminder recipients...",
+    @discord.ui.select(placeholder="Add members from the entire server...",
                        min_values=1, max_values=MAX_RECIPIENTS, row=0)
-    async def recipients(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
-        self.recipient_ids = list(dict.fromkeys(user.id for user in select.values))
-        select.default_values = [discord.Object(id=user_id) for user_id in self.recipient_ids]
-        self.send.disabled = False
-        await interaction.response.edit_message(embed=self.preview(), view=self)
+    async def recipients(self, interaction: discord.Interaction, select: discord.ui.Select):
+        allowed = {option.value for option in select.options if option.value != "none"}
+        if not set(select.values) <= allowed:
+            await interaction.response.send_message("Please select members from the current results.", ephemeral=True)
+            return
+        recipients = list(dict.fromkeys(self.recipient_ids + [int(value) for value in select.values]))
+        if len(recipients) > MAX_RECIPIENTS:
+            await interaction.response.send_message(f"Select at most {MAX_RECIPIENTS} people.", ephemeral=True)
+            return
+        self.recipient_ids = recipients
+        self.refresh_members()
+        await interaction.response.edit_message(embed=self.preview(), view=self,
+                                                allowed_mentions=discord.AllowedMentions.none())
+
+    @discord.ui.button(label="Search members", style=discord.ButtonStyle.secondary, row=1)
+    async def search(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(MemberSearchModal(self))
+
+    @discord.ui.button(label="Clear selection", style=discord.ButtonStyle.secondary, row=1)
+    async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.recipient_ids = []
+        self.refresh_members()
+        await interaction.response.edit_message(embed=self.preview(), view=self,
+                                                allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="Send reminder", style=discord.ButtonStyle.primary, row=1)
     async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -124,9 +201,10 @@ class ReminderView(discord.ui.View):
             return
         self.submitted = True
         self.stop()
+        recipient_ids = tuple(self.recipient_ids)
         await interaction.response.defer()
         await interaction.edit_original_response(content="Preparing reminder delivery...", embed=None, view=None)
-        await self.cog.send_reminder(interaction, self.message, tuple(self.recipient_ids))
+        await self.cog.send_reminder(interaction, self.message, recipient_ids)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, row=1)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -177,7 +255,7 @@ class DirectMessagesCog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(
         message="Reminder text (up to 2000 characters)",
-        recipients="User mentions or IDs separated by spaces; omit to use the member picker",
+        recipients="Search all server members by name, or enter user mentions/IDs; omit to choose members",
     )
     async def dm(self, interaction: discord.Interaction,
                  message: app_commands.Range[str, 1, 2000],
@@ -191,18 +269,34 @@ class DirectMessagesCog(commands.Cog):
         try:
             if not message.strip() or len(message) > 2000:
                 raise ValueError("Enter a reminder between 1 and 2000 characters.")
-            recipient_ids = parse_recipients(recipients) if recipients is not None else []
+            recipient_ids, query = [], ""
+            if recipients is not None:
+                if RECIPIENT_PATTERN.match(recipients.strip()) or any(c in recipients for c in "<>@"):
+                    recipient_ids = parse_recipients(recipients)
+                elif recipients.strip() and len(recipients) <= 100:
+                    query = recipients.strip()
+                else:
+                    raise ValueError("Enter a member search of up to 100 characters, or user mentions/IDs.")
         except ValueError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        view = ReminderView(self, interaction, message, recipient_ids)
-        await interaction.response.send_message(embed=view.preview(), view=view, ephemeral=True,
-                                                allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild.chunked:
+            try:
+                await asyncio.wait_for(interaction.guild.chunk(cache=True), REQUEST_TIMEOUT)
+            except (discord.DiscordException, asyncio.TimeoutError) as error:
+                logger.warning("DM member search unavailable: %s", type(error).__name__)
+                await interaction.edit_original_response(
+                    content="Could not load all server members. Please try again after the bot is ready.")
+                return
+        view = ReminderView(self, interaction, message, recipient_ids, query)
+        await interaction.edit_original_response(embed=view.preview(), view=view,
+                                                  allowed_mentions=discord.AllowedMentions.none())
 
     async def deliver(self, guild: discord.Guild, sender_id: int, message: str,
                       recipient_ids: tuple[int, ...]) -> list[DeliveryResult]:
         results = []
-        context = discord.Embed(title="Community reminder", description=f"Sent by <@{sender_id}>")
+        context = discord.Embed(description=f"Sent by <@{sender_id}>")
         context.set_footer(text=guild.name[:100])
         for index, user_id in enumerate(recipient_ids):
             if index:

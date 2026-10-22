@@ -12,8 +12,10 @@ from discord.ext import commands
 from src.bot.cogs.direct_messages import (
     DeliveryResult,
     DirectMessagesCog,
+    MemberSearchModal,
     ReminderView,
     delivery_report,
+    find_members,
     parse_recipients,
 )
 
@@ -31,6 +33,9 @@ def http_error(cls=discord.HTTPException, status=400, code=50035):
 def member(user_id, *, roles=(), admin=False, bot=False):
     user = Mock(spec=discord.Member)
     user.id = user_id
+    user.name = f"user{user_id}"
+    user.display_name = user.name
+    user.global_name = None
     user.roles = [SimpleNamespace(id=role_id) for role_id in roles]
     user.guild_permissions = discord.Permissions(administrator=admin)
     user.bot = bot
@@ -42,8 +47,10 @@ def interaction(user):
     return SimpleNamespace(
         user=user,
         guild_id=123,
-        guild=SimpleNamespace(name="Test server", fetch_member=AsyncMock()),
-        response=SimpleNamespace(send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock()),
+        guild=SimpleNamespace(name="Test server", fetch_member=AsyncMock(), chunked=True, chunk=AsyncMock(),
+                              members=[member(FIRST), member(SECOND), member(THIRD)]),
+        response=SimpleNamespace(send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock(),
+                                 send_modal=AsyncMock()),
         followup=SimpleNamespace(send=AsyncMock()),
         edit_original_response=AsyncMock(),
     )
@@ -73,6 +80,22 @@ class RecipientTests(unittest.TestCase):
         self.assertLessEqual(len(embed), 6000)
         self.assertEqual(embed.description.count("**Unknown**"), 25)
         self.assertIn("does not confirm", embed.footer.text)
+
+    def test_server_search_matches_names_nicknames_and_ids(self):
+        alice, bob, charlie = member(FIRST), member(SECOND), member(THIRD)
+        alice.name, alice.display_name = "alice", "Raid Captain"
+        bob.name, bob.global_name = "bob", "ALICE Fan"
+        for query, expected in (("aLiCe", [FIRST, SECOND]), ("captain", [FIRST]), (str(THIRD), [THIRD])):
+            matches, count = find_members([alice, bob, charlie], query, [])
+            self.assertEqual({user.id for user in matches}, set(expected))
+            self.assertEqual(count, len(expected))
+
+    def test_server_search_limits_results_and_excludes_bots_and_selected(self):
+        users = [member(FIRST + i) for i in range(40)] + [member(SECOND, bot=True)]
+        matches, total = find_members(users, "", [FIRST])
+        self.assertEqual(len(matches), 25)
+        self.assertEqual(total, 39)
+        self.assertNotIn(FIRST, [user.id for user in matches])
 
 
 class ReminderTests(unittest.IsolatedAsyncioTestCase):
@@ -106,8 +129,8 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_preview_is_private_with_prefilled_recipients(self):
         await self.cog.dm.callback(self.cog, self.interaction, "Private text", f"<@{FIRST}> {SECOND}")
-        kwargs = self.interaction.response.send_message.call_args.kwargs
-        self.assertTrue(kwargs["ephemeral"])
+        self.interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        kwargs = self.interaction.edit_original_response.call_args.kwargs
         self.assertEqual(kwargs["view"].recipient_ids, [FIRST, SECOND])
         self.assertFalse(kwargs["view"].send.disabled)
         self.interaction.followup.send.assert_not_awaited()
@@ -115,9 +138,9 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_picker_starts_with_send_disabled(self):
         await self.cog.dm.callback(self.cog, self.interaction, "Private text")
-        view = self.interaction.response.send_message.call_args.kwargs["view"]
-        self.assertIsInstance(view.recipients, discord.ui.UserSelect)
-        self.assertEqual(view.recipients.max_values, 25)
+        view = self.interaction.edit_original_response.call_args.kwargs["view"]
+        self.assertIsInstance(view.recipients, discord.ui.Select)
+        self.assertEqual(view.recipients.max_values, 3)
         self.assertTrue(view.send.disabled)
         view.stop()
 
@@ -140,13 +163,94 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await view.interaction_check(self.interaction))
         view.stop()
 
-    async def test_selection_updates_recipient_list(self):
+    async def test_selection_adds_to_existing_recipients(self):
         view = ReminderView(self.cog, self.interaction, "Private text", [])
-        # Supply the users that Discord would resolve for the component interaction.
-        view.recipients._values = [member(FIRST), member(SECOND)]
+        view.recipients._values = [str(FIRST)]
+        await view.recipients.callback(self.interaction)
+        view.recipients._values = [str(SECOND)]
         await view.recipients.callback(self.interaction)
         self.assertEqual(view.recipient_ids, [FIRST, SECOND])
         self.assertFalse(view.send.disabled)
+        view.stop()
+
+    async def test_name_filter_searches_members_without_channel_access(self):
+        invisible = member(FIRST)
+        invisible.display_name = "Outside channel"
+        self.interaction.guild.members = [invisible, member(SECOND)]
+        self.interaction.channel = SimpleNamespace(
+            permissions_for=Mock(return_value=discord.Permissions.none()),
+        )
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "outside")
+        view = self.interaction.edit_original_response.call_args.kwargs["view"]
+        self.assertEqual([option.value for option in view.recipients.options], [str(FIRST)])
+        self.assertEqual(view.query, "outside")
+        self.interaction.channel.permissions_for.assert_not_called()
+        view.stop()
+
+    async def test_member_cache_is_completed_before_search(self):
+        self.interaction.guild.chunked = False
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "user")
+        self.interaction.guild.chunk.assert_awaited_once_with(cache=True)
+        view = self.interaction.edit_original_response.call_args.kwargs["view"]
+        view.stop()
+
+    async def test_member_cache_failure_does_not_create_partial_picker(self):
+        self.interaction.guild.chunked = False
+        self.interaction.guild.chunk.side_effect = asyncio.TimeoutError()
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "user")
+        self.assertNotIn("view", self.interaction.edit_original_response.call_args.kwargs)
+        self.interaction.followup.send.assert_not_awaited()
+
+    async def test_search_modal_changes_results_and_preserves_selection(self):
+        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
+        await view.search.callback(self.interaction)
+        modal = self.interaction.response.send_modal.call_args.args[0]
+        self.assertIsInstance(modal, MemberSearchModal)
+        modal.query._value = str(SECOND)
+        await modal.on_submit(self.interaction)
+        self.assertEqual([option.value for option in view.recipients.options], [str(SECOND)])
+        self.assertEqual(view.recipient_ids, [FIRST])
+        await view.clear.callback(self.interaction)
+        self.assertEqual(view.recipient_ids, [])
+        self.assertTrue(view.send.disabled)
+        modal.stop()
+        view.stop()
+
+    async def test_search_modal_rejects_other_users_and_closed_reminders(self):
+        view = ReminderView(self.cog, self.interaction, "Private text", [])
+        modal = MemberSearchModal(view)
+        modal.query._value = "Changed"
+        await modal.on_submit(interaction(member(FIRST, admin=True)))
+        self.assertEqual(view.query, "")
+        view.stop()
+        await modal.on_submit(self.interaction)
+        self.assertEqual(view.query, "")
+        modal.stop()
+
+    async def test_no_matches_disable_picker_but_allow_another_search(self):
+        view = ReminderView(self.cog, self.interaction, "Private text", [], "no-such-member")
+        self.assertTrue(view.recipients.disabled)
+        self.assertFalse(view.search.disabled)
+        self.assertTrue(view.send.disabled)
+        view.stop()
+
+    async def test_full_selection_cannot_add_more_recipients(self):
+        self.interaction.guild.members = [member(FIRST + i) for i in range(26)]
+        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST + i for i in range(25)])
+        self.assertTrue(view.recipients.disabled)
+        self.assertTrue(view.search.disabled)
+        view.recipients._values = [str(FIRST + 25)]
+        await view.recipients.callback(self.interaction)
+        self.assertEqual(len(view.recipient_ids), 25)
+        self.interaction.response.send_message.assert_awaited_once()
+        view.stop()
+
+    async def test_values_outside_search_results_are_rejected(self):
+        view = ReminderView(self.cog, self.interaction, "Private text", [])
+        view.recipients._values = [str(SECOND + 1)]
+        await view.recipients.callback(self.interaction)
+        self.assertEqual(view.recipient_ids, [])
+        self.interaction.response.send_message.assert_awaited_once()
         view.stop()
 
     async def test_cancel_and_timeout_never_deliver(self):
@@ -178,6 +282,10 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
         for user in users:
             self.assertEqual(user.send.call_args.kwargs["content"], "@everyone private")
             self.assertEqual(user.send.call_args.kwargs["allowed_mentions"].to_dict(), {"parse": []})
+            context = user.send.call_args.kwargs["embed"]
+            self.assertIsNone(context.title)
+            self.assertEqual(context.description, f"Sent by <@{SENDER}>")
+            self.assertEqual(context.footer.text, "Test server")
 
     async def test_closed_dms_missing_members_and_bots_do_not_block_others(self):
         blocked, bot, reachable = member(FIRST), member(THIRD, bot=True), member(THIRD + 1)
