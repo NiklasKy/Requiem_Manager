@@ -203,10 +203,8 @@ Requiem_Manager/
 ### Direct Message Reminders
 *Requires Administrator permissions, a configured admin user, or a configured Admin/Mod role*
 
-- `/dm message:<reminder> recipients:<@member1 @member2>` - Prepare a reminder for specific members
-- `/dm message:<reminder> recipients:<name>` - Search all server members while typing; choose a suggestion, then append another name to add more recipients before submitting
-- `/dm message:<reminder>` - Choose up to 25 members using the server member picker; use **Search members** to find and add more people
-- Review the private preview and click **Send reminder**. The delivery report is **public in the channel where you ran the command**; the reminder text stays private.
+- `/dm message:<reminder>` - Open a private preview with a searchable member picker for up to 25 recipients
+- Submit the command, choose the recipients, then click **Send reminder**. The delivery report is **public in the channel where you ran the command**; the reminder text stays private.
 
 See the [Direct Message Reminder Guide](docs/DIRECT_MESSAGE_GUIDE.md) for permissions, delivery limits, and testing.
 

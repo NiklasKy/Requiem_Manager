@@ -3,7 +3,6 @@
 import asyncio
 import os
 import unittest
-from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -13,11 +12,8 @@ from discord.ext import commands
 from src.bot.cogs.direct_messages import (
     DeliveryResult,
     DirectMessagesCog,
-    MemberSearchModal,
     ReminderView,
     delivery_report,
-    find_members,
-    parse_recipients,
 )
 
 SENDER = 111111111111111111
@@ -34,9 +30,6 @@ def http_error(cls=discord.HTTPException, status=400, code=50035):
 def member(user_id, *, roles=(), admin=False, bot=False):
     user = Mock(spec=discord.Member)
     user.id = user_id
-    user.name = f"user{user_id}"
-    user.display_name = user.name
-    user.global_name = None
     user.roles = [SimpleNamespace(id=role_id) for role_id in roles]
     user.guild_permissions = discord.Permissions(administrator=admin)
     user.bot = bot
@@ -48,31 +41,14 @@ def interaction(user):
     return SimpleNamespace(
         user=user,
         guild_id=123,
-        guild=SimpleNamespace(name="Test server", fetch_member=AsyncMock(), chunked=True, chunk=AsyncMock(),
-                              members=[member(FIRST), member(SECOND), member(THIRD)]),
-        response=SimpleNamespace(send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock(),
-                                 send_modal=AsyncMock()),
+        guild=SimpleNamespace(name="Test server", fetch_member=AsyncMock()),
+        response=SimpleNamespace(send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock()),
         followup=SimpleNamespace(send=AsyncMock()),
         edit_original_response=AsyncMock(),
     )
 
 
-class RecipientTests(unittest.TestCase):
-    def test_mentions_ids_and_duplicates(self):
-        self.assertEqual(parse_recipients(f"<@{FIRST}> <@!{SECOND}>,{FIRST}; {THIRD}"),
-                         [FIRST, SECOND, THIRD])
-
-    def test_invalid_recipients_are_rejected(self):
-        for value in ("", " ", "@everyone", f"<@&{FIRST}>", "@nickname", "123", "99999999999999999999"):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                parse_recipients(value)
-
-    def test_recipient_and_input_limits(self):
-        self.assertEqual(len(parse_recipients(" ".join(str(FIRST + i) for i in range(25)))), 25)
-        for value in (" ".join(str(FIRST + i) for i in range(26)), "1" * 1001):
-            with self.assertRaises(ValueError):
-                parse_recipients(value)
-
+class ReportTests(unittest.TestCase):
     def test_worst_case_report_fits_discord_limits(self):
         results = [DeliveryResult(FIRST + i, "Unknown", "Unexpected error; check before resending.")
                    for i in range(25)]
@@ -81,22 +57,6 @@ class RecipientTests(unittest.TestCase):
         self.assertLessEqual(len(embed), 6000)
         self.assertEqual(embed.description.count("**Unknown**"), 25)
         self.assertIn("does not confirm", embed.footer.text)
-
-    def test_server_search_matches_names_nicknames_and_ids(self):
-        alice, bob, charlie = member(FIRST), member(SECOND), member(THIRD)
-        alice.name, alice.display_name = "alice", "Raid Captain"
-        bob.name, bob.global_name = "bob", "ALICE Fan"
-        for query, expected in (("aLiCe", [FIRST, SECOND]), ("captain", [FIRST]), (str(THIRD), [THIRD])):
-            matches, count = find_members([alice, bob, charlie], query, [])
-            self.assertEqual({user.id for user in matches}, set(expected))
-            self.assertEqual(count, len(expected))
-
-    def test_server_search_limits_results_and_excludes_bots_and_selected(self):
-        users = [member(FIRST + i) for i in range(40)] + [member(SECOND, bot=True)]
-        matches, total = find_members(users, "", [FIRST])
-        self.assertEqual(len(matches), 25)
-        self.assertEqual(total, 39)
-        self.assertNotIn(FIRST, [user.id for user in matches])
 
 
 class ReminderTests(unittest.IsolatedAsyncioTestCase):
@@ -124,127 +84,28 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(command)
             schema = command.to_dict(bot.tree)
             self.assertTrue(command.guild_only)
-            self.assertEqual([option["name"] for option in schema["options"]], ["message", "recipients"])
+            self.assertEqual([option["name"] for option in schema["options"]], ["message"])
             self.assertEqual(schema["options"][0]["max_length"], 2000)
-            self.assertFalse(schema["options"][1]["required"])
-            self.assertTrue(schema["options"][1]["autocomplete"])
+            self.assertTrue(schema["options"][0]["required"])
+            self.assertNotIn("autocomplete", schema["options"][0])
 
-    async def test_inline_autocomplete_finds_members_without_channel_access(self):
-        outside = member(FIRST)
-        outside.display_name = "Outside channel"
-        self.interaction.guild.members = [outside, member(SECOND)]
-        self.interaction.channel = SimpleNamespace(permissions_for=Mock(return_value=discord.Permissions.none()))
-        choices = await self.cog.recipients_autocomplete(self.interaction, "outside")
-        self.assertEqual(len(choices), 1)
-        self.assertIn("Outside channel", choices[0].name)
-        self.assertEqual(self.cog.resolve_recipients(self.interaction, choices[0].value), ([FIRST], ""))
-        self.interaction.channel.permissions_for.assert_not_called()
-
-    async def test_inline_autocomplete_preserves_native_mentions_and_ids(self):
-        for prefix in (f"<@{FIRST}>", str(FIRST)):
-            choices = await self.cog.recipients_autocomplete(self.interaction, f"{prefix} @user{SECOND}")
-            self.assertEqual(len(choices), 1)
-            self.assertEqual(self.cog.resolve_recipients(self.interaction, choices[0].value), ([FIRST, SECOND], ""))
-
-    async def test_all_25_recipients_can_be_selected_inline_before_command_submission(self):
-        users = [member(FIRST + i) for i in range(25)]
-        for index, user in enumerate(users):
-            user.name = f"person{index:02}"
-            user.display_name = "A very long display name " + str(index)
-        self.interaction.guild.members = users
-        current = ""
-        for index in range(25):
-            choices = await self.cog.recipients_autocomplete(self.interaction, f"{current} person{index:02}")
-            self.assertEqual(len(choices), 1)
-            current = choices[0].value
-            self.assertLessEqual(len(current), 100)
-            self.assertLessEqual(len(choices[0].name), 100)
-        choices = await self.cog.recipients_autocomplete(self.interaction, current)
-        self.assertEqual(len(choices), 1)
-        self.assertIn("25 members selected", choices[0].name)
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", current)
-        view = self.interaction.edit_original_response.call_args.kwargs["view"]
-        self.assertEqual(view.recipient_ids, [user.id for user in users])
-        self.assertFalse(view.send.disabled)
-        view.stop()
-
-    async def test_inline_selection_is_scoped_to_author_and_guild(self):
-        choice = (await self.cog.recipients_autocomplete(self.interaction, str(FIRST)[:10]))[0]
-        other = interaction(member(SECOND, admin=True))
-        self.assertEqual(await self.cog.recipients_autocomplete(other, choice.value), [])
-        with self.assertRaises(ValueError):
-            self.cog.resolve_recipients(other, choice.value)
-        other.user = self.sender
-        other.guild_id = 999
-        with self.assertRaises(ValueError):
-            self.cog.resolve_recipients(other, choice.value)
-
-    async def test_expired_or_modified_inline_selection_is_rejected(self):
-        choice = (await self.cog.recipients_autocomplete(self.interaction, ""))[0]
-        with self.assertRaises(ValueError):
-            self.cog.resolve_recipients(self.interaction, "99" + choice.value)
-        token = next(iter(self.cog.selections))
-        self.cog.selections[token] = replace(self.cog.selections[token], expires_at=0)
-        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, choice.value), [])
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", choice.value)
-        self.assertIn("expired", self.interaction.response.send_message.call_args.args[0])
-        self.interaction.edit_original_response.assert_not_awaited()
-
-    async def test_inline_selections_have_bounded_storage(self):
-        # The extension-registration test unloads its module; patch the globals
-        # of the actual cog instance rather than importing another module copy.
-        with patch.dict(self.cog._save_selection.__globals__, {"MAX_SAVED_SELECTIONS": 3}):
-            for _ in range(4):
-                await self.cog.recipients_autocomplete(self.interaction, "")
-        self.assertEqual(len(self.cog.selections), 3)
-
-    async def test_inline_autocomplete_requires_staff_permission(self):
-        self.interaction.user = member(FIRST)
-        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, ""), [])
-        self.assertEqual(len(self.cog.selections), 0)
-        self.interaction.guild.chunk.assert_not_awaited()
-
-    async def test_inline_autocomplete_does_not_return_partial_cache(self):
-        self.interaction.guild.chunked = False
-        self.interaction.guild.chunk.side_effect = asyncio.TimeoutError()
-        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, "user"), [])
-        self.interaction.guild.chunk.assert_awaited_once_with(cache=True)
-        self.assertEqual(len(self.cog.selections), 0)
-
-    async def test_inline_autocomplete_excludes_bots_and_already_selected_members(self):
-        self.interaction.guild.members.append(member(THIRD + 1, bot=True))
-        choice = (await self.cog.recipients_autocomplete(self.interaction, f"user{FIRST}"))[0]
-        choices = await self.cog.recipients_autocomplete(self.interaction, choice.value + " user")
-        self.assertEqual(len(choices), 2)
-        selected_lists = [self.cog.resolve_recipients(self.interaction, item.value)[0] for item in choices]
-        self.assertEqual(selected_lists, [[FIRST, SECOND], [FIRST, THIRD]])
-
-    async def test_unselected_inline_search_keeps_existing_recipients_for_preview(self):
-        choice = (await self.cog.recipients_autocomplete(self.interaction, f"user{FIRST}"))[0]
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", choice.value + " outside")
-        view = self.interaction.edit_original_response.call_args.kwargs["view"]
-        self.assertEqual(view.recipient_ids, [FIRST])
-        self.assertEqual(view.query, "outside")
-        view.stop()
-
-    async def test_inline_autocomplete_caps_choice_count_at_25(self):
-        self.interaction.guild.members = [member(FIRST + i) for i in range(40)]
-        self.assertEqual(len(await self.cog.recipients_autocomplete(self.interaction, "")), 25)
-
-    async def test_preview_is_private_with_prefilled_recipients(self):
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", f"<@{FIRST}> {SECOND}")
-        self.interaction.response.defer.assert_awaited_once_with(ephemeral=True)
-        kwargs = self.interaction.edit_original_response.call_args.kwargs
-        self.assertEqual(kwargs["view"].recipient_ids, [FIRST, SECOND])
-        self.assertFalse(kwargs["view"].send.disabled)
+    async def test_preview_is_private_with_native_member_picker(self):
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text")
+        kwargs = self.interaction.response.send_message.call_args.kwargs
+        self.assertTrue(kwargs["ephemeral"])
+        self.assertEqual(kwargs["view"].recipient_ids, [])
+        self.assertTrue(kwargs["view"].send.disabled)
+        components = kwargs["view"].to_components()
+        self.assertEqual(components[0]["components"][0]["type"], 5)
+        self.assertEqual(components[0]["components"][0]["max_values"], 25)
         self.interaction.followup.send.assert_not_awaited()
         kwargs["view"].stop()
 
     async def test_picker_starts_with_send_disabled(self):
         await self.cog.dm.callback(self.cog, self.interaction, "Private text")
-        view = self.interaction.edit_original_response.call_args.kwargs["view"]
-        self.assertIsInstance(view.recipients, discord.ui.Select)
-        self.assertEqual(view.recipients.max_values, 3)
+        view = self.interaction.response.send_message.call_args.kwargs["view"]
+        self.assertIsInstance(view.recipients, discord.ui.UserSelect)
+        self.assertEqual(view.recipients.max_values, 25)
         self.assertTrue(view.send.disabled)
         view.stop()
 
@@ -255,115 +116,38 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
         self.interaction.guild.fetch_member.assert_not_awaited()
 
     async def test_invalid_input_does_not_send(self):
-        for message, recipients in (("   ", None), ("x" * 2001, None), ("Reminder", "@everyone")):
-            await self.cog.dm.callback(self.cog, self.interaction, message, recipients)
+        for message in ("   ", "x" * 2001):
+            await self.cog.dm.callback(self.cog, self.interaction, message)
             self.assertNotIn("view", self.interaction.response.send_message.call_args.kwargs)
         self.interaction.followup.send.assert_not_awaited()
 
     async def test_only_author_can_operate_preview(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
+        view = ReminderView(self.cog, self.interaction, "Private text")
         outsider = interaction(member(FIRST, admin=True))
         self.assertFalse(await view.interaction_check(outsider))
         self.assertTrue(await view.interaction_check(self.interaction))
         view.stop()
 
-    async def test_selection_adds_to_existing_recipients(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [])
-        view.recipients._values = [str(FIRST)]
-        await view.recipients.callback(self.interaction)
-        view.recipients._values = [str(SECOND)]
+    async def test_selection_updates_recipient_list(self):
+        view = ReminderView(self.cog, self.interaction, "Private text")
+        # Supply the users that Discord would resolve for the component interaction.
+        view.recipients._values = [member(FIRST), member(SECOND)]
         await view.recipients.callback(self.interaction)
         self.assertEqual(view.recipient_ids, [FIRST, SECOND])
         self.assertFalse(view.send.disabled)
-        view.stop()
-
-    async def test_name_filter_searches_members_without_channel_access(self):
-        invisible = member(FIRST)
-        invisible.display_name = "Outside channel"
-        self.interaction.guild.members = [invisible, member(SECOND)]
-        self.interaction.channel = SimpleNamespace(
-            permissions_for=Mock(return_value=discord.Permissions.none()),
-        )
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "outside")
-        view = self.interaction.edit_original_response.call_args.kwargs["view"]
-        self.assertEqual([option.value for option in view.recipients.options], [str(FIRST)])
-        self.assertEqual(view.query, "outside")
-        self.interaction.channel.permissions_for.assert_not_called()
-        view.stop()
-
-    async def test_member_cache_is_completed_before_search(self):
-        self.interaction.guild.chunked = False
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "user")
-        self.interaction.guild.chunk.assert_awaited_once_with(cache=True)
-        view = self.interaction.edit_original_response.call_args.kwargs["view"]
-        view.stop()
-
-    async def test_member_cache_failure_does_not_create_partial_picker(self):
-        self.interaction.guild.chunked = False
-        self.interaction.guild.chunk.side_effect = asyncio.TimeoutError()
-        await self.cog.dm.callback(self.cog, self.interaction, "Private text", "user")
-        self.assertNotIn("view", self.interaction.edit_original_response.call_args.kwargs)
-        self.interaction.followup.send.assert_not_awaited()
-
-    async def test_search_modal_changes_results_and_preserves_selection(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
-        await view.search.callback(self.interaction)
-        modal = self.interaction.response.send_modal.call_args.args[0]
-        self.assertIsInstance(modal, MemberSearchModal)
-        modal.query._value = str(SECOND)
-        await modal.on_submit(self.interaction)
-        self.assertEqual([option.value for option in view.recipients.options], [str(SECOND)])
-        self.assertEqual(view.recipient_ids, [FIRST])
-        await view.clear.callback(self.interaction)
-        self.assertEqual(view.recipient_ids, [])
-        self.assertTrue(view.send.disabled)
-        modal.stop()
-        view.stop()
-
-    async def test_search_modal_rejects_other_users_and_closed_reminders(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [])
-        modal = MemberSearchModal(view)
-        modal.query._value = "Changed"
-        await modal.on_submit(interaction(member(FIRST, admin=True)))
-        self.assertEqual(view.query, "")
-        view.stop()
-        await modal.on_submit(self.interaction)
-        self.assertEqual(view.query, "")
-        modal.stop()
-
-    async def test_no_matches_disable_picker_but_allow_another_search(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [], "no-such-member")
-        self.assertTrue(view.recipients.disabled)
-        self.assertFalse(view.search.disabled)
-        self.assertTrue(view.send.disabled)
-        view.stop()
-
-    async def test_full_selection_cannot_add_more_recipients(self):
-        self.interaction.guild.members = [member(FIRST + i) for i in range(26)]
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST + i for i in range(25)])
-        self.assertTrue(view.recipients.disabled)
-        self.assertTrue(view.search.disabled)
-        view.recipients._values = [str(FIRST + 25)]
+        view.recipients._values = [member(THIRD)]
         await view.recipients.callback(self.interaction)
-        self.assertEqual(len(view.recipient_ids), 25)
-        self.interaction.response.send_message.assert_awaited_once()
-        view.stop()
-
-    async def test_values_outside_search_results_are_rejected(self):
-        view = ReminderView(self.cog, self.interaction, "Private text", [])
-        view.recipients._values = [str(SECOND + 1)]
-        await view.recipients.callback(self.interaction)
-        self.assertEqual(view.recipient_ids, [])
-        self.interaction.response.send_message.assert_awaited_once()
+        self.assertEqual(view.recipient_ids, [THIRD])
+        self.assertEqual([value.id for value in view.recipients.default_values], [THIRD])
         view.stop()
 
     async def test_cancel_and_timeout_never_deliver(self):
         self.cog.send_reminder = AsyncMock()
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
+        view = ReminderView(self.cog, self.interaction, "Private text")
         await view.cancel.callback(self.interaction)
         self.assertTrue(view.is_finished())
         self.cog.send_reminder.assert_not_awaited()
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
+        view = ReminderView(self.cog, self.interaction, "Private text")
         await view.on_timeout()
         self.assertTrue(view.submitted)
         self.assertFalse(await view.interaction_check(self.interaction))
@@ -372,9 +156,11 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_double_click_sends_only_once(self):
         self.cog.send_reminder = AsyncMock()
-        view = ReminderView(self.cog, self.interaction, "Private text", [FIRST])
+        view = ReminderView(self.cog, self.interaction, "Private text")
+        view.recipients._values = [member(FIRST)]
+        await view.recipients.callback(self.interaction)
         await asyncio.gather(view.send.callback(self.interaction), view.send.callback(self.interaction))
-        self.cog.send_reminder.assert_awaited_once()
+        self.cog.send_reminder.assert_awaited_once_with(self.interaction, "Private text", (FIRST,))
 
     async def test_successful_delivery_is_paced_and_suppresses_mentions(self):
         users = [member(FIRST), member(SECOND)]

@@ -4,10 +4,7 @@ import asyncio
 import logging
 import math
 import os
-import re
-import secrets
 import time
-from collections import OrderedDict
 from dataclasses import dataclass
 
 import discord
@@ -20,53 +17,6 @@ MAX_RECIPIENTS = 25
 SEND_INTERVAL = 2.0
 BATCH_COOLDOWN = 60.0
 REQUEST_TIMEOUT = 15.0
-AUTOCOMPLETE_TIMEOUT = 1.5
-SELECTION_TTL = 300.0
-MAX_SAVED_SELECTIONS = 2048
-RECIPIENT_PATTERN = re.compile(r"(?:<@!?(\d{17,20})>|(\d{17,20}))")
-SELECTION_PATTERN = re.compile(
-    r"(?P<value>.{1,78} \[dm:(?P<token>[A-Za-z0-9_-]{16})\])(?P<query>.*)"
-)
-
-
-@dataclass(frozen=True)
-class RecipientSelection:
-    guild_id: int
-    author_id: int
-    recipient_ids: tuple[int, ...]
-    value: str
-    expires_at: float
-
-
-def parse_recipients(value: str) -> list[int]:
-    """Accept explicit user mentions or IDs, preserving order without duplicates."""
-    if len(value) > 1000:
-        raise ValueError("The recipient list is too long.")
-    recipients = []
-    for token in re.split(r"[\s,;]+", value.strip()):
-        match = RECIPIENT_PATTERN.fullmatch(token)
-        if match is None:
-            raise ValueError("Use user mentions or user IDs separated by spaces or commas.")
-        user_id = int(match.group(1) or match.group(2))
-        if user_id >= 2**64:
-            raise ValueError("A recipient ID is invalid.")
-        if user_id not in recipients:
-            recipients.append(user_id)
-        if len(recipients) > MAX_RECIPIENTS:
-            raise ValueError(f"Select at most {MAX_RECIPIENTS} people per reminder.")
-    return recipients
-
-
-def find_members(members, query: str, selected_ids: list[int]) -> tuple[list, int]:
-    """Search the guild member cache without applying channel visibility filters."""
-    query = query.strip().casefold()
-    selected = set(selected_ids)
-    matches = [member for member in members if not member.bot and member.id not in selected
-               and any(query in value.casefold() for value in (
-                   member.display_name, member.name, member.global_name or "", str(member.id),
-               ))]
-    matches.sort(key=lambda member: (member.display_name.casefold(), member.id))
-    return matches[:MAX_RECIPIENTS], len(matches)
 
 
 @dataclass(frozen=True)
@@ -99,72 +49,24 @@ def delivery_report(sender_id: int, results: list[DeliveryResult]) -> discord.Em
     return embed
 
 
-class MemberSearchModal(discord.ui.Modal, title="Search all server members"):
-    query = discord.ui.TextInput(
-        label="Member name or user ID",
-        placeholder="Search by nickname, username, or ID; leave blank to show all",
-        max_length=100,
-        required=False,
-    )
-
-    def __init__(self, reminder):
-        super().__init__(timeout=180)
-        self.reminder = reminder
-        self.query.default = reminder.query
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if not await self.reminder.interaction_check(interaction):
-            return
-        self.reminder.query = self.query.value.strip()
-        self.reminder.refresh_members()
-        await interaction.response.edit_message(embed=self.reminder.preview(), view=self.reminder,
-                                                allowed_mentions=discord.AllowedMentions.none())
-
-    async def on_error(self, interaction, error):
-        await self.reminder.on_error(interaction, error, None)
-
-
 class ReminderView(discord.ui.View):
     """Keep the composition private and require an explicit send action."""
 
-    def __init__(self, cog, interaction: discord.Interaction, message: str,
-                 recipient_ids: list[int], query: str = ""):
+    def __init__(self, cog, interaction: discord.Interaction, message: str):
         super().__init__(timeout=300)
         self.cog = cog
         self.origin = interaction
         self.message = message
-        self.recipient_ids = recipient_ids
-        self.query = query
+        self.recipient_ids: list[int] = []
         self.submitted = False
-        self.match_count = 0
-        self.refresh_members()
-
-    def refresh_members(self):
-        matches, self.match_count = find_members(self.origin.guild.members, self.query, self.recipient_ids)
-        remaining = MAX_RECIPIENTS - len(self.recipient_ids)
-        self.recipients.options = [discord.SelectOption(
-            label=member.display_name[:100], value=str(member.id),
-            description=f"@{member.name} | {member.id}"[:100],
-        ) for member in matches] or [discord.SelectOption(label="No matching members", value="none")]
-        self.recipients.max_values = max(1, min(len(matches), remaining))
-        self.recipients.disabled = not matches or remaining <= 0
-        self.search.disabled = remaining <= 0
-        self.clear.disabled = not self.recipient_ids
-        self.send.disabled = not self.recipient_ids
+        self.send.disabled = True
 
     def preview(self) -> discord.Embed:
         embed = discord.Embed(title="Direct message preview", description=self.message)
         embed.add_field(
             name=f"Recipients ({len(self.recipient_ids)}/{MAX_RECIPIENTS})",
             value=" ".join(f"<@{user_id}>" for user_id in self.recipient_ids)
-            or "Choose members below or search the entire server.",
-            inline=False,
-        )
-        embed.add_field(
-            name="Server member search",
-            value=f"Filter: {discord.utils.escape_markdown(self.query) if self.query else 'All members'}\n"
-                  f"Showing {min(self.match_count, MAX_RECIPIENTS)} of {self.match_count} unselected matches. "
-                  "Use Search members to narrow the results. Selections are added to your recipient list.",
+            or "Choose members below.",
             inline=False,
         )
         embed.set_footer(text="The delivery report will be public in this channel. Preview expires in 5 minutes.")
@@ -183,32 +85,13 @@ class ReminderView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.select(placeholder="Add members from the entire server...",
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Select reminder recipients...",
                        min_values=1, max_values=MAX_RECIPIENTS, row=0)
-    async def recipients(self, interaction: discord.Interaction, select: discord.ui.Select):
-        allowed = {option.value for option in select.options if option.value != "none"}
-        if not set(select.values) <= allowed:
-            await interaction.response.send_message("Please select members from the current results.", ephemeral=True)
-            return
-        recipients = list(dict.fromkeys(self.recipient_ids + [int(value) for value in select.values]))
-        if len(recipients) > MAX_RECIPIENTS:
-            await interaction.response.send_message(f"Select at most {MAX_RECIPIENTS} people.", ephemeral=True)
-            return
-        self.recipient_ids = recipients
-        self.refresh_members()
-        await interaction.response.edit_message(embed=self.preview(), view=self,
-                                                allowed_mentions=discord.AllowedMentions.none())
-
-    @discord.ui.button(label="Search members", style=discord.ButtonStyle.secondary, row=1)
-    async def search(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberSearchModal(self))
-
-    @discord.ui.button(label="Clear selection", style=discord.ButtonStyle.secondary, row=1)
-    async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.recipient_ids = []
-        self.refresh_members()
-        await interaction.response.edit_message(embed=self.preview(), view=self,
-                                                allowed_mentions=discord.AllowedMentions.none())
+    async def recipients(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
+        self.recipient_ids = list(dict.fromkeys(user.id for user in select.values))
+        select.default_values = [discord.Object(id=user_id) for user_id in self.recipient_ids]
+        self.send.disabled = False
+        await interaction.response.edit_message(embed=self.preview(), view=self)
 
     @discord.ui.button(label="Send reminder", style=discord.ButtonStyle.primary, row=1)
     async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -254,65 +137,6 @@ class DirectMessagesCog(commands.Cog):
         self.staff_roles = self._configured_ids("ADMIN_ROLE_IDS") | self._configured_ids("MOD_ROLE_IDS")
         self.send_lock = asyncio.Lock()
         self.next_batch_at = 0.0
-        # Discord limits autocomplete choice values to 100 characters. Store the
-        # full list server-side so all 25 recipients fit in one slash option.
-        self.selections: OrderedDict[str, RecipientSelection] = OrderedDict()
-
-    def _prune_selections(self):
-        now = time.monotonic()
-        for token, selection in list(self.selections.items()):
-            if selection.expires_at <= now:
-                del self.selections[token]
-
-    def _save_selection(self, interaction, recipient_ids: tuple[int, ...], names: dict[int, str]) -> str:
-        self._prune_selections()
-        while len(self.selections) >= MAX_SAVED_SELECTIONS:
-            self.selections.popitem(last=False)
-        token = secrets.token_urlsafe(12)
-        label = f"{len(recipient_ids)} selected: " + ", ".join(
-            " ".join(names.get(user_id, str(user_id)).split()) for user_id in recipient_ids
-        )
-        value = f"{label[:78]} [dm:{token}]"
-        self.selections[token] = RecipientSelection(
-            interaction.guild_id, interaction.user.id, recipient_ids, value,
-            time.monotonic() + SELECTION_TTL,
-        )
-        return value
-
-    def resolve_recipients(self, interaction, value: str) -> tuple[list[int], str]:
-        """Resolve an owner-scoped autocomplete selection or a mention/ID prefix."""
-        if len(value) > 1000:
-            raise ValueError("The recipient list is too long.")
-        value = value.strip()
-        match = SELECTION_PATTERN.fullmatch(value)
-        if match is not None:
-            self._prune_selections()
-            selection = self.selections.get(match.group("token"))
-            if (selection is None or selection.guild_id != interaction.guild_id
-                    or selection.author_id != interaction.user.id
-                    or selection.value != match.group("value")):
-                raise ValueError("This recipient selection expired or is unavailable. Clear recipients and search again.")
-            self.selections.move_to_end(match.group("token"))
-            recipient_ids = list(selection.recipient_ids)
-            rest = match.group("query")
-        else:
-            if "[dm:" in value:
-                raise ValueError("This recipient selection is invalid. Clear recipients and search again.")
-            recipient_ids, rest = [], value
-            while match := RECIPIENT_PATTERN.match(rest):
-                if match.end() < len(rest) and rest[match.end()] not in " ,;\t\n":
-                    break
-                recipient_ids.extend(parse_recipients(match.group()))
-                rest = rest[match.end():].lstrip(" ,;\t\n")
-            recipient_ids = list(dict.fromkeys(recipient_ids))
-        query = rest.strip(" ,;\t\n").removeprefix("@").strip()
-        if len(recipient_ids) > MAX_RECIPIENTS:
-            raise ValueError(f"Select at most {MAX_RECIPIENTS} people per reminder.")
-        if (len(query) > 100 or any(c in query for c in "<>@")
-                or rest.strip().casefold() in {"@everyone", "@here"}
-                or (not recipient_ids and not query)):
-            raise ValueError("Enter a member name to search, or user mentions/IDs.")
-        return recipient_ids, query
 
     @staticmethod
     def _configured_ids(key: str) -> set[int]:
@@ -329,67 +153,23 @@ class DirectMessagesCog(commands.Cog):
 
     @app_commands.command(name="dm", description="Send a reminder to selected members and publish a delivery report")
     @app_commands.guild_only()
-    @app_commands.describe(
-        message="Reminder text (up to 2000 characters)",
-        recipients="Type a name and choose a server member; append another name to add more (up to 25)",
-    )
+    @app_commands.describe(message="Reminder text (up to 2000 characters)")
     async def dm(self, interaction: discord.Interaction,
-                 message: app_commands.Range[str, 1, 2000],
-                 recipients: app_commands.Range[str, 1, 1000] | None = None):
+                 message: app_commands.Range[str, 1, 2000]):
         if interaction.guild is None or not self.has_permission(interaction.user):
             await interaction.response.send_message(
                 "You need administrator permissions or a configured admin/mod role to use /dm.",
                 ephemeral=True,
             )
             return
-        try:
-            if not message.strip() or len(message) > 2000:
-                raise ValueError("Enter a reminder between 1 and 2000 characters.")
-            recipient_ids, query = [], ""
-            if recipients is not None:
-                recipient_ids, query = self.resolve_recipients(interaction, recipients)
-        except ValueError as error:
-            await interaction.response.send_message(str(error), ephemeral=True)
+        if not message.strip() or len(message) > 2000:
+            await interaction.response.send_message(
+                "Enter a reminder between 1 and 2000 characters.", ephemeral=True,
+            )
             return
-        await interaction.response.defer(ephemeral=True)
-        if not interaction.guild.chunked:
-            try:
-                await asyncio.wait_for(interaction.guild.chunk(cache=True), REQUEST_TIMEOUT)
-            except (discord.DiscordException, asyncio.TimeoutError) as error:
-                logger.warning("DM member search unavailable: %s", type(error).__name__)
-                await interaction.edit_original_response(
-                    content="Could not load all server members. Please try again after the bot is ready.")
-                return
-        view = ReminderView(self, interaction, message, recipient_ids, query)
-        await interaction.edit_original_response(embed=view.preview(), view=view,
-                                                  allowed_mentions=discord.AllowedMentions.none())
-
-    @dm.autocomplete("recipients")
-    async def recipients_autocomplete(self, interaction: discord.Interaction,
-                                     current: str) -> list[app_commands.Choice[str]]:
-        # Autocomplete does not run command authorization checks automatically.
-        if interaction.guild is None or not self.has_permission(interaction.user):
-            return []
-        try:
-            recipient_ids, query = self.resolve_recipients(interaction, current) if current.strip() else ([], "")
-        except ValueError:
-            return []
-        if not interaction.guild.chunked:
-            try:
-                await asyncio.wait_for(interaction.guild.chunk(cache=True), AUTOCOMPLETE_TIMEOUT)
-            except (discord.DiscordException, asyncio.TimeoutError):
-                return []
-        if len(recipient_ids) >= MAX_RECIPIENTS:
-            selection = SELECTION_PATTERN.fullmatch(current.strip())
-            return [app_commands.Choice(
-                name="25 members selected. Submit /dm to review.", value=selection.group("value"),
-            )] if selection is not None else []
-        matches, _ = find_members(interaction.guild.members, query, recipient_ids)
-        names = {member.id: member.display_name for member in interaction.guild.members}
-        return [app_commands.Choice(
-            name=f"{len(recipient_ids) + 1}/25: {member.display_name[:40]} (@{member.name[:20]}) [{member.id}]",
-            value=self._save_selection(interaction, tuple(recipient_ids + [member.id]), names),
-        ) for member in matches]
+        view = ReminderView(self, interaction, message)
+        await interaction.response.send_message(embed=view.preview(), view=view, ephemeral=True,
+                                                allowed_mentions=discord.AllowedMentions.none())
 
     async def deliver(self, guild: discord.Guild, sender_id: int, message: str,
                       recipient_ids: tuple[int, ...]) -> list[DeliveryResult]:
