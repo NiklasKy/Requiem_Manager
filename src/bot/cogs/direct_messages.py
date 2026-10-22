@@ -5,7 +5,9 @@ import logging
 import math
 import os
 import re
+import secrets
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import discord
@@ -18,7 +20,22 @@ MAX_RECIPIENTS = 25
 SEND_INTERVAL = 2.0
 BATCH_COOLDOWN = 60.0
 REQUEST_TIMEOUT = 15.0
+AUTOCOMPLETE_TIMEOUT = 1.5
+SELECTION_TTL = 300.0
+MAX_SAVED_SELECTIONS = 2048
 RECIPIENT_PATTERN = re.compile(r"(?:<@!?(\d{17,20})>|(\d{17,20}))")
+SELECTION_PATTERN = re.compile(
+    r"(?P<value>.{1,78} \[dm:(?P<token>[A-Za-z0-9_-]{16})\])(?P<query>.*)"
+)
+
+
+@dataclass(frozen=True)
+class RecipientSelection:
+    guild_id: int
+    author_id: int
+    recipient_ids: tuple[int, ...]
+    value: str
+    expires_at: float
 
 
 def parse_recipients(value: str) -> list[int]:
@@ -237,6 +254,65 @@ class DirectMessagesCog(commands.Cog):
         self.staff_roles = self._configured_ids("ADMIN_ROLE_IDS") | self._configured_ids("MOD_ROLE_IDS")
         self.send_lock = asyncio.Lock()
         self.next_batch_at = 0.0
+        # Discord limits autocomplete choice values to 100 characters. Store the
+        # full list server-side so all 25 recipients fit in one slash option.
+        self.selections: OrderedDict[str, RecipientSelection] = OrderedDict()
+
+    def _prune_selections(self):
+        now = time.monotonic()
+        for token, selection in list(self.selections.items()):
+            if selection.expires_at <= now:
+                del self.selections[token]
+
+    def _save_selection(self, interaction, recipient_ids: tuple[int, ...], names: dict[int, str]) -> str:
+        self._prune_selections()
+        while len(self.selections) >= MAX_SAVED_SELECTIONS:
+            self.selections.popitem(last=False)
+        token = secrets.token_urlsafe(12)
+        label = f"{len(recipient_ids)} selected: " + ", ".join(
+            " ".join(names.get(user_id, str(user_id)).split()) for user_id in recipient_ids
+        )
+        value = f"{label[:78]} [dm:{token}]"
+        self.selections[token] = RecipientSelection(
+            interaction.guild_id, interaction.user.id, recipient_ids, value,
+            time.monotonic() + SELECTION_TTL,
+        )
+        return value
+
+    def resolve_recipients(self, interaction, value: str) -> tuple[list[int], str]:
+        """Resolve an owner-scoped autocomplete selection or a mention/ID prefix."""
+        if len(value) > 1000:
+            raise ValueError("The recipient list is too long.")
+        value = value.strip()
+        match = SELECTION_PATTERN.fullmatch(value)
+        if match is not None:
+            self._prune_selections()
+            selection = self.selections.get(match.group("token"))
+            if (selection is None or selection.guild_id != interaction.guild_id
+                    or selection.author_id != interaction.user.id
+                    or selection.value != match.group("value")):
+                raise ValueError("This recipient selection expired or is unavailable. Clear recipients and search again.")
+            self.selections.move_to_end(match.group("token"))
+            recipient_ids = list(selection.recipient_ids)
+            rest = match.group("query")
+        else:
+            if "[dm:" in value:
+                raise ValueError("This recipient selection is invalid. Clear recipients and search again.")
+            recipient_ids, rest = [], value
+            while match := RECIPIENT_PATTERN.match(rest):
+                if match.end() < len(rest) and rest[match.end()] not in " ,;\t\n":
+                    break
+                recipient_ids.extend(parse_recipients(match.group()))
+                rest = rest[match.end():].lstrip(" ,;\t\n")
+            recipient_ids = list(dict.fromkeys(recipient_ids))
+        query = rest.strip(" ,;\t\n").removeprefix("@").strip()
+        if len(recipient_ids) > MAX_RECIPIENTS:
+            raise ValueError(f"Select at most {MAX_RECIPIENTS} people per reminder.")
+        if (len(query) > 100 or any(c in query for c in "<>@")
+                or rest.strip().casefold() in {"@everyone", "@here"}
+                or (not recipient_ids and not query)):
+            raise ValueError("Enter a member name to search, or user mentions/IDs.")
+        return recipient_ids, query
 
     @staticmethod
     def _configured_ids(key: str) -> set[int]:
@@ -255,7 +331,7 @@ class DirectMessagesCog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(
         message="Reminder text (up to 2000 characters)",
-        recipients="Search all server members by name, or enter user mentions/IDs; omit to choose members",
+        recipients="Type a name and choose a server member; append another name to add more (up to 25)",
     )
     async def dm(self, interaction: discord.Interaction,
                  message: app_commands.Range[str, 1, 2000],
@@ -271,12 +347,7 @@ class DirectMessagesCog(commands.Cog):
                 raise ValueError("Enter a reminder between 1 and 2000 characters.")
             recipient_ids, query = [], ""
             if recipients is not None:
-                if RECIPIENT_PATTERN.match(recipients.strip()) or any(c in recipients for c in "<>@"):
-                    recipient_ids = parse_recipients(recipients)
-                elif recipients.strip() and len(recipients) <= 100:
-                    query = recipients.strip()
-                else:
-                    raise ValueError("Enter a member search of up to 100 characters, or user mentions/IDs.")
+                recipient_ids, query = self.resolve_recipients(interaction, recipients)
         except ValueError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
@@ -292,6 +363,33 @@ class DirectMessagesCog(commands.Cog):
         view = ReminderView(self, interaction, message, recipient_ids, query)
         await interaction.edit_original_response(embed=view.preview(), view=view,
                                                   allowed_mentions=discord.AllowedMentions.none())
+
+    @dm.autocomplete("recipients")
+    async def recipients_autocomplete(self, interaction: discord.Interaction,
+                                     current: str) -> list[app_commands.Choice[str]]:
+        # Autocomplete does not run command authorization checks automatically.
+        if interaction.guild is None or not self.has_permission(interaction.user):
+            return []
+        try:
+            recipient_ids, query = self.resolve_recipients(interaction, current) if current.strip() else ([], "")
+        except ValueError:
+            return []
+        if not interaction.guild.chunked:
+            try:
+                await asyncio.wait_for(interaction.guild.chunk(cache=True), AUTOCOMPLETE_TIMEOUT)
+            except (discord.DiscordException, asyncio.TimeoutError):
+                return []
+        if len(recipient_ids) >= MAX_RECIPIENTS:
+            selection = SELECTION_PATTERN.fullmatch(current.strip())
+            return [app_commands.Choice(
+                name="25 members selected. Submit /dm to review.", value=selection.group("value"),
+            )] if selection is not None else []
+        matches, _ = find_members(interaction.guild.members, query, recipient_ids)
+        names = {member.id: member.display_name for member in interaction.guild.members}
+        return [app_commands.Choice(
+            name=f"{len(recipient_ids) + 1}/25: {member.display_name[:40]} (@{member.name[:20]}) [{member.id}]",
+            value=self._save_selection(interaction, tuple(recipient_ids + [member.id]), names),
+        ) for member in matches]
 
     async def deliver(self, guild: discord.Guild, sender_id: int, message: str,
                       recipient_ids: tuple[int, ...]) -> list[DeliveryResult]:

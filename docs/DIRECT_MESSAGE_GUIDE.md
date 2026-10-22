@@ -4,13 +4,31 @@ The `/dm` command sends the same reminder to explicitly selected server members.
 
 ## Usage
 
+### Search directly in the slash-command field
+
+1. Enter `/dm` and the reminder text.
+2. Open `recipients` and type a name **without `@`**. The bot suggests server members while you type, including members without access to the current channel.
+3. Select a suggestion. The field now contains a compact selection showing the number of selected members and their names.
+4. To add another person before submitting, click the `recipients` field again and append a space followed by their name. Keep the existing selection text intact and choose the next suggestion. Repeat for up to 25 people.
+5. Submit `/dm` to review all selected recipients in the private preview, then click **Send reminder**.
+
+Suggestions search nicknames, usernames, global display names, and IDs. They show each result's username and ID to distinguish people with similar names. Bots and already-selected recipients are excluded. Only authorized staff receive these suggestions.
+
+The selection includes a short `[dm:...]` reference. It stores the full list for the requester and server because [Discord limits an autocomplete choice value to 100 characters](https://docs.discord.com/developers/interactions/application-commands#application-command-option-choice-structure). Do not edit that reference. Selections expire after five minutes and are discarded when the bot restarts. If a selection expires, clear the field and choose the members again. Saved selections have a fixed memory limit; older unused selections can be discarded when that limit is reached.
+
+Typing `@` can open Discord's own mention suggestions. Type a plain name to use the bot's server-wide autocomplete. A name that has not been selected from the suggestions remains a search filter for the preview; it is not added as a recipient automatically.
+
+### Mentions and user IDs
+
 With explicit recipients:
 
 ```text
 /dm message:Please sign up for Saturday's raid. recipients:@Alice @Bob @Charlie
 ```
 
-The `recipients` option accepts user mentions or Discord user IDs separated by spaces, commas, or semicolons. Duplicate recipients are removed. Role mentions and `@everyone` are rejected. Discord controls native `@` suggestions in this text field; those suggestions can be limited by channel visibility.
+The `recipients` option also accepts user mentions or Discord user IDs separated by spaces, commas, or semicolons. Duplicate recipients are removed. Role mentions and `@everyone` are rejected. You can append a name after existing mentions/IDs and select a server-wide autocomplete suggestion to add that person.
+
+### Search in the private preview
 
 To search the entire server, enter a name **without `@`** instead:
 
@@ -41,7 +59,7 @@ The command works only inside a server. It is available to members with Discord'
 
 Only the requester can use their preview's controls. The bot fetches the requester's current server membership and checks their authorization again immediately before starting delivery. It also fetches each recipient's current server membership before sending; users outside that server and bot accounts do not receive reminders.
 
-Server member search uses the bot's member cache and its existing **Server Members Intent**. If the cache is incomplete, the command requests the full server member list before opening the picker. If this fails, it reports an error instead of showing a partial list. Keep the already-required Server Members Intent enabled in the Discord Developer Portal. The search does not change anyone's channel permissions.
+Server member search uses the bot's member cache and its existing **Server Members Intent**. If the cache is incomplete, autocomplete allows up to 1.5 seconds to complete it and returns no suggestions if it is still unavailable. The submitted command allows up to 15 seconds before opening the picker; if loading fails, it reports an error instead of showing a partial list. Keep the already-required Server Members Intent enabled in the Discord Developer Portal. The search does not change anyone's channel permissions.
 
 If Discord command permissions were restricted manually, allow the configured staff roles to use `/dm` under **Server Settings → Integrations → the bot**. The bot does not require Administrator permission to send DMs. Its existing slash-command installation and access to the invocation channel are sufficient when Discord allows the interactions and embedded reports.
 
@@ -85,4 +103,4 @@ Offline verification, using an environment with `discord.py` 2.7.1 installed:
 python -m unittest discover -s tests -v
 ```
 
-These tests use mocked Discord requests and never send real DMs. For live verification, use consenting test accounts: one that accepts bot DMs and one that rejects them. Include a member without access to the invocation channel and verify that they appear in the server-wide search. Confirm that multiple searches preserve selected recipients, and check the private picker/preview, the received message and sender context, the public report in the invocation channel, authorization restrictions, and that the report never includes reminder text.
+These tests use mocked Discord requests and never send real DMs. For live verification, use consenting test accounts: one that accepts bot DMs and one that rejects them. Include a member without access to the invocation channel and verify that they appear in `recipients` suggestions **before submitting the command**, as well as in the preview search. Select several people by appending names in the slash-command field and confirm the preview contains all of them. Also check the received message and sender context, the public report in the invocation channel, authorization restrictions, and that the report never includes reminder text.

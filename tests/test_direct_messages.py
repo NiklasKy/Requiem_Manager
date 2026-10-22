@@ -3,6 +3,7 @@
 import asyncio
 import os
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -126,6 +127,109 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([option["name"] for option in schema["options"]], ["message", "recipients"])
             self.assertEqual(schema["options"][0]["max_length"], 2000)
             self.assertFalse(schema["options"][1]["required"])
+            self.assertTrue(schema["options"][1]["autocomplete"])
+
+    async def test_inline_autocomplete_finds_members_without_channel_access(self):
+        outside = member(FIRST)
+        outside.display_name = "Outside channel"
+        self.interaction.guild.members = [outside, member(SECOND)]
+        self.interaction.channel = SimpleNamespace(permissions_for=Mock(return_value=discord.Permissions.none()))
+        choices = await self.cog.recipients_autocomplete(self.interaction, "outside")
+        self.assertEqual(len(choices), 1)
+        self.assertIn("Outside channel", choices[0].name)
+        self.assertEqual(self.cog.resolve_recipients(self.interaction, choices[0].value), ([FIRST], ""))
+        self.interaction.channel.permissions_for.assert_not_called()
+
+    async def test_inline_autocomplete_preserves_native_mentions_and_ids(self):
+        for prefix in (f"<@{FIRST}>", str(FIRST)):
+            choices = await self.cog.recipients_autocomplete(self.interaction, f"{prefix} @user{SECOND}")
+            self.assertEqual(len(choices), 1)
+            self.assertEqual(self.cog.resolve_recipients(self.interaction, choices[0].value), ([FIRST, SECOND], ""))
+
+    async def test_all_25_recipients_can_be_selected_inline_before_command_submission(self):
+        users = [member(FIRST + i) for i in range(25)]
+        for index, user in enumerate(users):
+            user.name = f"person{index:02}"
+            user.display_name = "A very long display name " + str(index)
+        self.interaction.guild.members = users
+        current = ""
+        for index in range(25):
+            choices = await self.cog.recipients_autocomplete(self.interaction, f"{current} person{index:02}")
+            self.assertEqual(len(choices), 1)
+            current = choices[0].value
+            self.assertLessEqual(len(current), 100)
+            self.assertLessEqual(len(choices[0].name), 100)
+        choices = await self.cog.recipients_autocomplete(self.interaction, current)
+        self.assertEqual(len(choices), 1)
+        self.assertIn("25 members selected", choices[0].name)
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", current)
+        view = self.interaction.edit_original_response.call_args.kwargs["view"]
+        self.assertEqual(view.recipient_ids, [user.id for user in users])
+        self.assertFalse(view.send.disabled)
+        view.stop()
+
+    async def test_inline_selection_is_scoped_to_author_and_guild(self):
+        choice = (await self.cog.recipients_autocomplete(self.interaction, str(FIRST)[:10]))[0]
+        other = interaction(member(SECOND, admin=True))
+        self.assertEqual(await self.cog.recipients_autocomplete(other, choice.value), [])
+        with self.assertRaises(ValueError):
+            self.cog.resolve_recipients(other, choice.value)
+        other.user = self.sender
+        other.guild_id = 999
+        with self.assertRaises(ValueError):
+            self.cog.resolve_recipients(other, choice.value)
+
+    async def test_expired_or_modified_inline_selection_is_rejected(self):
+        choice = (await self.cog.recipients_autocomplete(self.interaction, ""))[0]
+        with self.assertRaises(ValueError):
+            self.cog.resolve_recipients(self.interaction, "99" + choice.value)
+        token = next(iter(self.cog.selections))
+        self.cog.selections[token] = replace(self.cog.selections[token], expires_at=0)
+        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, choice.value), [])
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", choice.value)
+        self.assertIn("expired", self.interaction.response.send_message.call_args.args[0])
+        self.interaction.edit_original_response.assert_not_awaited()
+
+    async def test_inline_selections_have_bounded_storage(self):
+        # The extension-registration test unloads its module; patch the globals
+        # of the actual cog instance rather than importing another module copy.
+        with patch.dict(self.cog._save_selection.__globals__, {"MAX_SAVED_SELECTIONS": 3}):
+            for _ in range(4):
+                await self.cog.recipients_autocomplete(self.interaction, "")
+        self.assertEqual(len(self.cog.selections), 3)
+
+    async def test_inline_autocomplete_requires_staff_permission(self):
+        self.interaction.user = member(FIRST)
+        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, ""), [])
+        self.assertEqual(len(self.cog.selections), 0)
+        self.interaction.guild.chunk.assert_not_awaited()
+
+    async def test_inline_autocomplete_does_not_return_partial_cache(self):
+        self.interaction.guild.chunked = False
+        self.interaction.guild.chunk.side_effect = asyncio.TimeoutError()
+        self.assertEqual(await self.cog.recipients_autocomplete(self.interaction, "user"), [])
+        self.interaction.guild.chunk.assert_awaited_once_with(cache=True)
+        self.assertEqual(len(self.cog.selections), 0)
+
+    async def test_inline_autocomplete_excludes_bots_and_already_selected_members(self):
+        self.interaction.guild.members.append(member(THIRD + 1, bot=True))
+        choice = (await self.cog.recipients_autocomplete(self.interaction, f"user{FIRST}"))[0]
+        choices = await self.cog.recipients_autocomplete(self.interaction, choice.value + " user")
+        self.assertEqual(len(choices), 2)
+        selected_lists = [self.cog.resolve_recipients(self.interaction, item.value)[0] for item in choices]
+        self.assertEqual(selected_lists, [[FIRST, SECOND], [FIRST, THIRD]])
+
+    async def test_unselected_inline_search_keeps_existing_recipients_for_preview(self):
+        choice = (await self.cog.recipients_autocomplete(self.interaction, f"user{FIRST}"))[0]
+        await self.cog.dm.callback(self.cog, self.interaction, "Private text", choice.value + " outside")
+        view = self.interaction.edit_original_response.call_args.kwargs["view"]
+        self.assertEqual(view.recipient_ids, [FIRST])
+        self.assertEqual(view.query, "outside")
+        view.stop()
+
+    async def test_inline_autocomplete_caps_choice_count_at_25(self):
+        self.interaction.guild.members = [member(FIRST + i) for i in range(40)]
+        self.assertEqual(len(await self.cog.recipients_autocomplete(self.interaction, "")), 25)
 
     async def test_preview_is_private_with_prefilled_recipients(self):
         await self.cog.dm.callback(self.cog, self.interaction, "Private text", f"<@{FIRST}> {SECOND}")
