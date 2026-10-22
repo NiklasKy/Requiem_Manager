@@ -22,6 +22,7 @@ A comprehensive Discord bot system for tracking user activities with a modern Re
 - **Discord Bot** with Cogs architecture and Slash Commands
 - **User Tracking**: Username, nickname, and role changes with complete history
 - **Message Scheduler**: Automated recurring messages with role pings and embed support
+- **Direct Message Reminders**: Send staff reminders to selected members with a public delivery report
 - **Activity Recognition**: AI-powered game screenshot analysis using OpenAI Vision API
 - **SQLite Database** for persistent data storage with optimized indexes
 - **REST API** with FastAPI for secure data access
@@ -198,6 +199,15 @@ Requiem_Manager/
 - `/schedule_toggle <message_id>` - Enable or disable a scheduled message
 
 📚 **Detailed Guide:** See [Message Scheduler Documentation](docs/MESSAGE_SCHEDULER_GUIDE.md)
+
+### Direct Message Reminders
+*Requires Administrator permissions, a configured admin user, or a configured Admin/Mod role*
+
+- `/dm message:<reminder> recipients:<@member1 @member2>` - Prepare a reminder for specific members
+- `/dm message:<reminder>` - Choose up to 25 members using the searchable member picker
+- Review the private preview and click **Send reminder**. The delivery report is **public in the channel where you ran the command**; the reminder text stays private.
+
+See the [Direct Message Reminder Guide](docs/DIRECT_MESSAGE_GUIDE.md) for permissions, delivery limits, and testing.
 
 ## 📊 Dashboard Features
 

@@ -55,6 +55,7 @@ class RequiemBot(commands.Bot):
             'src.bot.cogs.scheduler',
             'src.bot.cogs.soundbot',
             'src.bot.cogs.role_comparison',
+            'src.bot.cogs.direct_messages',
         ]
         
         for cog in cogs_to_load:
